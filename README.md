@@ -1,0 +1,1 @@
+# Faster-OJ.nvim
