@@ -4,7 +4,7 @@ local M = {}
 -- 内部日志函数
 local function log(...)
 	if M.config and M.config.server_debug then
-		print("[faster-oj][handler]", ...)
+		print("[FOJ][handler]", ...)
 	end
 end
 

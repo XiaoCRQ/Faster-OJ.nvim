@@ -10,7 +10,7 @@ local stderr_pipe = nil
 
 local function log(...)
 	if M.config and M.config.server_debug then
-		print("[faster-oj][ws]", ...)
+		print("[FOJ][ws]", ...)
 	end
 end
 

@@ -7,7 +7,7 @@ local clients = {}
 
 local function log(...)
 	if M.config.server_debug then
-		print("[faster-oj][http]", ...)
+		print("[FOJ][http]", ...)
 	end
 end
 
@@ -63,7 +63,7 @@ function M.start(cfg)
 		end)
 	end)
 
-	print("[faster-oj][http] HTTP server listening on " .. host .. ":" .. port)
+	log("HTTP server listening on " .. host .. ":" .. port)
 end
 
 function M.stop()
@@ -75,7 +75,7 @@ function M.stop()
 		clients = {}
 		server:close()
 		server = nil
-		print("[faster-oj][http] stopped")
+		log("HTTP server stopped")
 	end
 end
 

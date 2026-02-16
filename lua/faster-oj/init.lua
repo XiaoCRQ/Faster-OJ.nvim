@@ -1,4 +1,6 @@
 local M = {}
+local http_server_is_open = false
+local ws_server_is_open = false
 
 -- 默认配置
 M.config = {
@@ -7,13 +9,14 @@ M.config = {
 	ws_host = "127.0.0.1",
 	ws_port = 10044,
 	server_debug = false,
-	server_mod = "only_ws", -- only_http | only_ws | all
-	json_dir = "Problem",
+	server_mod = "all", -- only_http | only_ws | all
+	json_dir = ".problem/json",
+	code_obfuscator = "",
 }
 
 local function log(...)
 	if M.config.server_debug then
-		print("[faster-oj]", ...)
+		print("[FOJ]", ...)
 	end
 end
 
@@ -22,7 +25,7 @@ end
 -- -------------------------------
 local http_server = require("faster-oj.server.http.server")
 local ws_server = require("faster-oj.server.websocket.server")
-
+local featrue = require("faster-oj.featrue.init")
 -- -------------------------------
 -- Setup 配置
 -- -------------------------------
@@ -40,18 +43,13 @@ function M.setup(opts)
 		if cmd == "server" or cmd == "sv" then
 			if sub_cmd and sub_cmd:lower() == "stop" then
 				M.stop("all")
-			else
+			elseif sub_cmd then
 				M.start(sub_cmd)
-			end
-		elseif cmd == "websocket" or cmd == "ws" then
-			if #args > 1 then
-				-- 去掉首尾空格和多余引号
-				local sub_cmd = table.concat(vim.list_slice(args, 2), " ")
-				sub_cmd = sub_cmd:gsub("^[\"']+", ""):gsub("[\"']+$", ""):gsub("^%s+", ""):gsub("%s+$", "")
-				ws_server.send(sub_cmd)
 			else
-				print("[FOJ] Missing websocket command")
+				M.start(nil)
 			end
+		elseif cmd == "submit" or cmd == "sb" then
+			featrue.submit(M.config, ws_server.send)
 		else
 			print("[FOJ] Unknown command:", cmd)
 		end
@@ -67,11 +65,22 @@ function M.start(mod)
 
 	if mod == "only_http" then
 		http_server.start(M.config)
+		http_server_is_open = true
+		print("[FOJ] The HTTP server has been turned ON")
 	elseif mod == "only_ws" then
 		ws_server.start(M.config)
+		ws_server_is_open = true
+		print("[FOJ] The WS server has been turned ON")
 	elseif mod == "all" then
-		http_server.start(M.config)
-		ws_server.start(M.config)
+		if http_server_is_open and ws_server_is_open then
+			M.stop("all")
+		else
+			http_server.start(M.config)
+			ws_server.start(M.config)
+			http_server_is_open = true
+			ws_server_is_open = true
+			print("[FOJ] The ALL server has been turned ON")
+		end
 	else
 		error("Invalid server_mod: " .. tostring(mod))
 	end
@@ -86,11 +95,18 @@ function M.stop(mod)
 
 	if mod == "only_http" then
 		http_server.stop()
+		http_server_is_open = false
+		print("[FOJ] The HTTP server has been turned OFF")
 	elseif mod == "only_ws" then
 		ws_server.stop()
+		ws_server_is_open = false
+		print("[FOJ] The WS server has been turned OFF")
 	elseif mod == "all" then
 		http_server.stop()
 		ws_server.stop()
+		http_server_is_open = false
+		ws_server_is_open = false
+		print("[FOJ] The ALL server has been turned OFF")
 	else
 		error("Invalid server_mod: " .. tostring(mod))
 	end
