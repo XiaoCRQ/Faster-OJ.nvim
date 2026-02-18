@@ -1,6 +1,4 @@
 local M = {}
-local http_server_is_open = false
-local ws_server_is_open = false
 
 -- 默认配置
 M.config = {
@@ -12,6 +10,23 @@ M.config = {
 	server_mod = "all", -- only_http | only_ws | all
 	json_dir = ".problem/json",
 	code_obfuscator = "",
+	compile_command = {
+		c = {
+			exec = "gcc",
+			args = { "-O2", "-Wall", "$(FABSPATH)", "-o", "/$(FNOEXT)" },
+		},
+		cpp = {
+			exec = "g++",
+			args = { "-O2", "-Wall", "$(FABSPATH)", "-o", "/$(FNOEXT)" },
+		},
+	},
+	run_command = {
+		c = { exec = "/$(FNOEXT)" },
+		cpp = { exec = "/$(FNOEXT)" },
+		rust = { exec = "/$(FNOEXT)" },
+		python = { exec = "python", args = { "$(FNAME)" } },
+		java = { exec = "java", args = { "$(FNOEXT)" } },
+	},
 }
 
 local function log(...)
@@ -31,6 +46,9 @@ local featrue = require("faster-oj.featrue.init")
 -- -------------------------------
 function M.setup(opts)
 	M.config = vim.tbl_deep_extend("force", M.config or {}, opts or {})
+	featrue.init(M.config)
+	ws_server.init(M.config)
+	http_server.init(M.config)
 
 	vim.api.nvim_create_user_command("FOJ", function(params)
 		local args = vim.split(params.args or "", "%s+")
@@ -49,7 +67,7 @@ function M.setup(opts)
 				M.start(nil)
 			end
 		elseif cmd == "submit" or cmd == "sb" then
-			featrue.submit(M.config, ws_server.send)
+			featrue.submit(ws_server.send)
 		else
 			print("[FOJ] Unknown command:", cmd)
 		end
@@ -64,21 +82,17 @@ function M.start(mod)
 	log("Starting server mode:", mod)
 
 	if mod == "only_http" then
-		http_server.start(M.config)
-		http_server_is_open = true
+		http_server.start()
 		print("[FOJ] The HTTP server has been turned ON")
 	elseif mod == "only_ws" then
-		ws_server.start(M.config)
-		ws_server_is_open = true
+		ws_server.start()
 		print("[FOJ] The WS server has been turned ON")
 	elseif mod == "all" then
-		if http_server_is_open and ws_server_is_open then
+		if http_server.is_open() and ws_server.is_open() then
 			M.stop("all")
 		else
-			http_server.start(M.config)
-			ws_server.start(M.config)
-			http_server_is_open = true
-			ws_server_is_open = true
+			http_server.start()
+			ws_server.start()
 			print("[FOJ] The ALL server has been turned ON")
 		end
 	else
@@ -95,17 +109,13 @@ function M.stop(mod)
 
 	if mod == "only_http" then
 		http_server.stop()
-		http_server_is_open = false
 		print("[FOJ] The HTTP server has been turned OFF")
 	elseif mod == "only_ws" then
 		ws_server.stop()
-		ws_server_is_open = false
 		print("[FOJ] The WS server has been turned OFF")
 	elseif mod == "all" then
 		http_server.stop()
 		ws_server.stop()
-		http_server_is_open = false
-		ws_server_is_open = false
 		print("[FOJ] The ALL server has been turned OFF")
 	else
 		error("Invalid server_mod: " .. tostring(mod))

@@ -11,10 +11,19 @@ local function log(...)
 	end
 end
 
-function M.start(cfg)
+function M.init(cfg)
 	M.config = cfg
+end
 
+function M.is_open()
 	if server then
+		return true
+	end
+	return false
+end
+
+function M.start()
+	if M.is_open() then
 		log("HTTP server already running")
 		return
 	end
@@ -22,7 +31,6 @@ function M.start(cfg)
 	local host = M.config.http_host
 	local port = M.config.http_port
 	log(host .. port)
-
 	server = uv.new_tcp()
 	server:bind(host, port)
 	server:listen(128, function(err)
@@ -67,7 +75,7 @@ function M.start(cfg)
 end
 
 function M.stop()
-	if server then
+	if M.is_open() then
 		for _, c in ipairs(clients) do
 			c:shutdown()
 			c:close()

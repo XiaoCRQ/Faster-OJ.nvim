@@ -1,12 +1,11 @@
 local uv = vim.loop
-local handler = require("faster-oj.server.websocket.handler")
 local M = {}
-
--- 内部进程和管道句柄
-local ws_handle = nil
-local stdin_pipe = nil
-local stdout_pipe = nil
-local stderr_pipe = nil
+M.handle = nil
+M.pipe = {
+	stdin = nil,
+	stdout = nil,
+	stderr = nil,
+}
 
 local function log(...)
 	if M.config and M.config.server_debug then
@@ -14,81 +13,81 @@ local function log(...)
 	end
 end
 
+function M.init(cfg)
+	M.config = cfg or {}
+end
+
+function M.is_open()
+	if M.handle then
+		return true
+	end
+	return false
+end
+
 -- 启动 WebSocket 服务
-function M.start(cfg)
-	if ws_handle then
+function M.start()
+	if M.is_open() then
 		log("WebSocket server already running")
 		return
 	end
 
-	M.config = cfg or {}
 	local host = M.config.ws_host or "127.0.0.1"
 	local port = M.config.ws_port or 10044
 
 	-- 创建管道
-	stdin_pipe = uv.new_pipe(false)
-	stdout_pipe = uv.new_pipe(false)
-	stderr_pipe = uv.new_pipe(false)
-	M.stdin_pipe = stdin_pipe
-	M.stdout_pipe = stdout_pipe
-	M.stderr_pipe = stderr_pipe
-
-	-- 初始化 handler
-	handler.init(M, M.config)
+	M.pipe.stdin = uv.new_pipe(false)
+	M.pipe.stdout = uv.new_pipe(false)
+	M.pipe.stderr = uv.new_pipe(false)
 
 	-- 启动进程
-	ws_handle = uv.spawn("mini-wsbroad", {
+	M.handle = uv.spawn("mini-wsbroad", {
 		args = { host, tostring(port) },
-		stdio = { stdin_pipe, stdout_pipe, stderr_pipe },
+		stdio = { M.pipe.stdin, M.pipe.stdout, M.pipe.stderr },
 	}, function(code, signal)
 		log("WebSocket server exited with code:", code, "signal:", signal)
 		-- 清理
-		if ws_handle then
-			ws_handle:close()
+		if M.handle then
+			M.handle:close()
 		end
-		ws_handle = nil
-		if stdin_pipe then
-			stdin_pipe:close()
+		M.handle = nil
+		if M.pipe.stdin then
+			M.pipe.stdin:close()
 		end
-		if stdout_pipe then
-			stdout_pipe:close()
+		if M.pipe.stdout then
+			M.pipe.stdout:close()
 		end
-		if stderr_pipe then
-			stderr_pipe:close()
+		if M.pipe.stderr then
+			M.pipe.stderr:close()
 		end
-		stdin_pipe, stdout_pipe, stderr_pipe = nil, nil, nil
+		M.pipe.stdin, M.pipe.stdout, M.pipe.stderr = nil, nil, nil
 	end)
 
-	if not ws_handle then
+	if not M.handle then
 		error("Failed to start WebSocket server process")
 	end
 
-	-- 读取 stdout / stderr 并分发给 handler
-	stdout_pipe:read_start(function(err, data)
+	M.pipe.stdout:read_start(function(err, data)
 		if data then
 			log("[stdout]", data:gsub("\n$", ""))
-			handler.on_message(data)
+			M.on_message(data)
 		end
 	end)
 
-	stderr_pipe:read_start(function(err, data)
+	M.pipe.stderr:read_start(function(err, data)
 		if data then
 			log("[stderr]", data:gsub("\n$", ""))
+			M.on_err(data)
 		end
 	end)
 
 	-- 启动服务器
-	handler.send("sv on")
+	M.send("server on\n")
 	log(string.format("WebSocket server starting at ws://%s:%d", host, port))
-end
-
-function M.send(text)
-	handler.send(text)
 end
 
 -- 停止 WebSocket 服务
 function M.stop()
-	if not ws_handle then
+	if not M.is_open() then
 		log("WebSocket server not running")
 		return
 	end
@@ -96,18 +95,37 @@ function M.stop()
 	local exited = false
 	local timer = uv.new_timer()
 	timer:start(3000, 0, function()
-		if ws_handle and not exited then
+		if M.handle and not exited then
 			log("WebSocket server did not exit in 3s, force kill")
-			ws_handle:kill("sigterm")
+			M.handle:kill("sigterm")
 			exited = true
 		end
 		timer:stop()
 		timer:close()
 	end)
 
-	if stdin_pipe then
-		handler.send("exit")
+	if M.pipe.stdin then
+		M.pipe.stdin:write("exit\n")
 	end
+end
+
+function M.send(text)
+	if not M.pipe or not M.pipe.stdin then
+		log("Cannot send, stdin_pipe not ready")
+		return
+	end
+	M.pipe.stdin:write(text .. "\n")
+	log("Sent to server:", text)
+end
+
+function M.on_message(msg)
+	log("Received message:", msg)
+	-- TODO: 在这里解析并处理消息
+end
+
+function M.on_err(msg)
+	log("Received message:", msg)
+	-- TODO: 在这里解析并处理消息
 end
 
 return M
