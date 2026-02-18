@@ -1,4 +1,4 @@
-local uv = vim.loop
+local uv = vim.uv or vim.loop
 local handler = require("faster-oj.server.http.handler")
 local M = {}
 
@@ -11,15 +11,21 @@ local function log(...)
 	end
 end
 
+local function remove_client(c)
+	for i, v in ipairs(clients) do
+		if v == c then
+			table.remove(clients, i)
+			return
+		end
+	end
+end
+
 function M.init(cfg)
 	M.config = cfg
 end
 
 function M.is_open()
-	if server then
-		return true
-	end
-	return false
+	return server ~= nil
 end
 
 function M.start()
@@ -30,11 +36,15 @@ function M.start()
 
 	local host = M.config.http_host
 	local port = M.config.http_port
-	log(host .. port)
+
 	server = uv.new_tcp()
 	server:bind(host, port)
+
 	server:listen(128, function(err)
-		assert(not err, err)
+		if err then
+			log("Listen error:", err)
+			return
+		end
 
 		local client = uv.new_tcp()
 		server:accept(client)
@@ -43,31 +53,42 @@ function M.start()
 		local buffer = ""
 
 		client:read_start(function(err, data)
-			assert(not err, err)
+			if err then
+				log("Read error:", err)
+				return
+			end
+
 			if data then
 				buffer = buffer .. data
-			else
-				-- 客户端关闭，尝试解析完整请求
-				local json_str = buffer:match("{.*}")
-				if json_str then
-					-- 使用异步安全的 vim.schedule
-					vim.schedule(function()
-						local ok, decoded = pcall(vim.json.decode, json_str)
-						if ok and decoded then
-							handler.handle(decoded, M.config)
-						else
-							log("Failed to decode JSON")
-						end
-					end)
-				else
-					log("No JSON found in request")
-				end
-
-				-- 返回 200 OK
-				client:write("HTTP/1.1 200 OK\r\nContent-Length:0\r\n\r\n")
-				client:shutdown()
-				client:close()
+				return
 			end
+
+			-- EOF
+			local body = buffer:match("\r\n\r\n(.*)")
+
+			if body then
+				vim.schedule(function()
+					local ok, decoded = pcall(vim.json.decode, body)
+					if ok and decoded then
+						handler.handle(decoded, M.config)
+					else
+						log("Failed to decode JSON")
+					end
+				end)
+			else
+				log("No body found")
+			end
+
+			local response = "HTTP/1.1 200 OK\r\nContent-Length:0\r\n\r\n"
+
+			client:write(response, function()
+				if not client:is_closing() then
+					client:shutdown(function()
+						client:close()
+					end)
+				end
+				remove_client(client)
+			end)
 		end)
 	end)
 
@@ -75,16 +96,25 @@ function M.start()
 end
 
 function M.stop()
-	if M.is_open() then
-		for _, c in ipairs(clients) do
+	if not M.is_open() then
+		return
+	end
+
+	for _, c in ipairs(clients) do
+		if not c:is_closing() then
 			c:shutdown()
 			c:close()
 		end
-		clients = {}
-		server:close()
-		server = nil
-		log("HTTP server stopped")
 	end
+
+	clients = {}
+
+	if not server:is_closing() then
+		server:close()
+	end
+
+	server = nil
+	log("HTTP server stopped")
 end
 
 return M

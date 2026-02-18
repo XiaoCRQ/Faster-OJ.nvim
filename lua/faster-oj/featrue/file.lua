@@ -12,27 +12,25 @@ end
 
 local function detect_language(ext)
 	ext = ext:lower()
-
 	local map = {
 		c = "c",
 		h = "c",
-
 		cpp = "cpp",
 		cc = "cpp",
 		cxx = "cpp",
 		hpp = "cpp",
-
+		hh = "cpp",
 		py = "python",
 		lua = "lua",
-
 		js = "javascript",
 		ts = "typescript",
-
 		java = "java",
 		rs = "rust",
 		go = "go",
+		pas = "pascal",
+		kt = "kotlin",
+		cs = "csharp",
 	}
-
 	return map[ext] or ext
 end
 
@@ -50,6 +48,10 @@ local function get_json_path()
 	local filename = vim.fn.fnamemodify(file_path, ":t:r")
 	local json_path = M.config.json_dir .. "/" .. filename .. ".json"
 	return vim.fn.fnamemodify(json_path, ":p")
+end
+
+function M.get_file_path()
+	return get_file_path()
 end
 
 -- ---------------- 文件工具 ----------------

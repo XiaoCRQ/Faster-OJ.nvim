@@ -1,33 +1,14 @@
+-- -------------------------------
+-- 加载子模块
+-- -------------------------------
+local http_server = require("faster-oj.server.http.server")
+local ws_server = require("faster-oj.server.websocket.server")
+local featrue = require("faster-oj.featrue.init")
+local default_config = require("faster-oj.default")
+
 local M = {}
 
--- 默认配置
-M.config = {
-	http_host = "127.0.0.1",
-	http_port = 10043,
-	ws_host = "127.0.0.1",
-	ws_port = 10044,
-	server_debug = false,
-	server_mod = "all", -- only_http | only_ws | all
-	json_dir = ".problem/json",
-	code_obfuscator = "",
-	compile_command = {
-		c = {
-			exec = "gcc",
-			args = { "-O2", "-Wall", "$(FABSPATH)", "-o", "/$(FNOEXT)" },
-		},
-		cpp = {
-			exec = "g++",
-			args = { "-O2", "-Wall", "$(FABSPATH)", "-o", "/$(FNOEXT)" },
-		},
-	},
-	run_command = {
-		c = { exec = "/$(FNOEXT)" },
-		cpp = { exec = "/$(FNOEXT)" },
-		rust = { exec = "/$(FNOEXT)" },
-		python = { exec = "python", args = { "$(FNAME)" } },
-		java = { exec = "java", args = { "$(FNOEXT)" } },
-	},
-}
+M.config = default_config.config
 
 local function log(...)
 	if M.config.server_debug then
@@ -35,12 +16,6 @@ local function log(...)
 	end
 end
 
--- -------------------------------
--- 加载子模块
--- -------------------------------
-local http_server = require("faster-oj.server.http.server")
-local ws_server = require("faster-oj.server.websocket.server")
-local featrue = require("faster-oj.featrue.init")
 -- -------------------------------
 -- Setup 配置
 -- -------------------------------
@@ -68,6 +43,8 @@ function M.setup(opts)
 			end
 		elseif cmd == "submit" or cmd == "sb" then
 			featrue.submit(ws_server.send)
+		elseif cmd == "test" or cmd == "run" then
+			featrue.run()
 		else
 			print("[FOJ] Unknown command:", cmd)
 		end
