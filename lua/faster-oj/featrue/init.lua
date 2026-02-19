@@ -1,6 +1,6 @@
 local M = {}
 local ui = require("faster-oj.featrue.ui")
-local run = require("faster-oj.featrue.run")
+local runner = require("faster-oj.featrue.run")
 local file = require("faster-oj.featrue.file")
 
 local function log(...)
@@ -9,11 +9,11 @@ local function log(...)
 	end
 end
 
-function M.init(cfg)
-	M.config = cfg
-	ui.init(cfg)
-	run.init(cfg)
-	file.init(cfg)
+function M.setup(cfg)
+	M.config = cfg or {}
+	ui.setup(cfg)
+	runner.setup(cfg)
+	file.setup(cfg)
 end
 
 function M.submit(send)
@@ -23,12 +23,37 @@ end
 function M.run()
 	local file_path = file.get_file_path()
 	local json = file.get_json_file()
-	run.run(file_path, json, function(results)
-		for i, res in ipairs(results) do
-			print("Test " .. i, res.state.type)
-			print(res.output or "")
+	local windowss = ui.new()
+	local testcases = {}
+
+	print("[FOJ] Commencing code testing...")
+
+	runner.compile(file_path, function(success, msg, need)
+		if not success then
+			print("[FOJ] Compilation Failed:\n" .. msg)
+			return
 		end
+		if need then
+			print("[FOJ] Compilation Success!")
+		end
+		M.show()
+		runner.run(file_path, json, function(res)
+			testcases[res.test_index] = res
+		end)
 	end)
+end
+
+function M.show()
+	ui.show()
+end
+
+function M.close()
+	ui.close()
+end
+
+function M.renew()
+	ui.erase()
+	ui.new()
 end
 
 return M

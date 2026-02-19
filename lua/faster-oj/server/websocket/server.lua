@@ -13,7 +13,7 @@ local function log(...)
 	end
 end
 
-function M.init(cfg)
+function M.setup(cfg)
 	M.config = cfg or {}
 end
 

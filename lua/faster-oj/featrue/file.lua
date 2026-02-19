@@ -1,6 +1,6 @@
 local M = {}
 
-function M.init(cfg)
+function M.setup(cfg)
 	M.config = cfg
 end
 

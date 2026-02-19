@@ -21,9 +21,9 @@ end
 -- -------------------------------
 function M.setup(opts)
 	M.config = vim.tbl_deep_extend("force", M.config or {}, opts or {})
-	featrue.init(M.config)
-	ws_server.init(M.config)
-	http_server.init(M.config)
+	featrue.setup(M.config)
+	ws_server.setup(M.config)
+	http_server.setup(M.config)
 
 	vim.api.nvim_create_user_command("FOJ", function(params)
 		local args = vim.split(params.args or "", "%s+")
@@ -45,6 +45,10 @@ function M.setup(opts)
 			featrue.submit(ws_server.send)
 		elseif cmd == "test" or cmd == "run" then
 			featrue.run()
+		elseif cmd == "show" then
+			featrue.show()
+		elseif cmd == "close" then
+			featrue.close()
 		else
 			print("[FOJ] Unknown command:", cmd)
 		end

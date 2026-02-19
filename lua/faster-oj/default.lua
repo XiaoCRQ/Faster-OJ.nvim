@@ -13,9 +13,21 @@ M.config = {
 	code_obfuscator = "",
 	obscure = true,
 
-	max_workers = 4,
+	max_workers = 5,
 	output_max_chars = 50,
 	output_max_lines = 100,
+
+	ui = {
+		width = 0.9,
+		height = 0.9,
+		layout = {
+			{ 2, "Testcases" },
+			{ 5, { { 1, "Input" }, { 1, "Output" } } },
+			{ 5, { { 1, "Info" }, { 1, "Expected Output" } } },
+		},
+	},
+
+	highlights = {},
 
 	compile_command = {
 

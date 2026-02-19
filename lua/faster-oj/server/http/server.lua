@@ -20,8 +20,8 @@ local function remove_client(c)
 	end
 end
 
-function M.init(cfg)
-	M.config = cfg
+function M.setup(cfg)
+	M.config = cfg or {}
 end
 
 function M.is_open()
