@@ -5,77 +5,46 @@ local M = {}
 local uv = vim.uv or vim.loop
 local is_win = vim.fn.has("win32") == 1
 local is_mac = vim.fn.has("mac") == 1
+local utils = require("faster-oj.featrue.utils")
+
+-- 保存上一次编译的警告或错误信息
+local last_compile_msg = nil
 
 --------------------------------------------------------------------------------
 -- [LOGGING] 调试日志系统
 --------------------------------------------------------------------------------
 local function log(...)
-	if M.config.server_debug then
+	if M.config and M.config.debug then
 		print("[FOJ][run]", ...)
 	end
 end
-
 --------------------------------------------------------------------------------
--- [DATA STRUCTURES] 回调数据结构说明
---------------------------------------------------------------------------------
--- 1. 编译回调 (M.compile):
---    success: boolean (是否成功)
---    msg: string (编译错误信息或空字符串)
---
--- 2. 运行回调 (M.run -> res):
---    {
---        test_index  = number,    -- 用例索引 (1-based)
---        input       = string,    -- 输入数据
---        expected    = string,    -- 预期标准输出
---        output      = string,    -- 实际程序输出
---        used_time   = number,    -- 运行耗时 (ms)
---        used_memory = number,    -- 峰值内存 (kb)
---        diff        = table|nil, -- 错误区间: {{start, end}, ...} (0-based)
---        state = {
---            type = string,       -- "AC", "WA", "TLE", "MLE", "RE"
---            msg  = string|nil    -- 错误简述
---        }
---    }
+-- [CORE] 差异与二维高亮坐标计算
 --------------------------------------------------------------------------------
 
---------------------------------------------------------------------------------
--- [INTERNAL UTILS] 内部工具函数
---------------------------------------------------------------------------------
+--- 将字符串按行分割，计算每个 token 的 2D 高亮坐标 (0-based, 前闭后开)
+local function get_tokens_with_coords(str, obscure)
+	local tokens = {}
+	local lines = vim.split(str, "\n", { plain = true })
+	local pattern = obscure and "()(%S+)()" or "()(.)()"
 
---- 获取路径变量占位符
-local function get_vars(file_path)
-	return {
-		FNAME = vim.fn.fnamemodify(file_path, ":t"),
-		FNOEXT = vim.fn.fnamemodify(file_path, ":t:r"),
-		FABSPATH = vim.fn.fnamemodify(file_path, ":p"),
-		DIR = vim.fn.fnamemodify(file_path, ":h"),
-	}
-end
-
---- 安全扩展占位符，处理多返回值并支持带空格路径
-local function expand(str, vars)
-	if not str then
-		return ""
-	end
-	-- 用括号包裹 gsub 确保只返回第一个结果，避免 table.insert 报错
-	return (str:gsub("[%@%$%%]%(?([%w_]+)%)?", function(k)
-		return vars[k] or ""
-	end))
-end
-
---- 差异区间计算
-local function compute_diff_ranges(user_out, std_out, obscure)
-	local function get_tokens(s)
-		local t = {}
-		local p = obscure and "()(%S+)()" or "()(.)()"
-		for sp, txt, ep in s:gmatch(p) do
-			table.insert(t, { text = txt, s = sp - 1, e = ep - 2 })
+	for l_idx, line in ipairs(lines) do
+		for start_pos, text, end_pos in line:gmatch(pattern) do
+			table.insert(tokens, {
+				text = text,
+				line = l_idx - 1,
+				sc = start_pos - 1,
+				ec = end_pos - 1,
+			})
 		end
-		return t
 	end
+	return tokens
+end
 
-	local u_toks = get_tokens(user_out)
-	local s_toks = get_tokens(std_out)
+--- 计算并合并高亮区间
+local function compute_diff_ranges(user_out, std_out, obscure)
+	local u_toks = get_tokens_with_coords(user_out, obscure)
+	local s_toks = get_tokens_with_coords(std_out, obscure)
 
 	local u_flat, s_flat = {}, {}
 	for _, t in ipairs(u_toks) do
@@ -97,15 +66,32 @@ local function compute_diff_ranges(user_out, std_out, obscure)
 		return nil, true, nil
 	end
 
-	local diff_ranges, first_msg = {}, nil
+	local diff_ranges = {}
+	local first_msg = nil
+
 	for i, d in ipairs(indices) do
 		local ua, uc, sb = d[1], d[2], d[3]
+
 		if uc > 0 then
-			table.insert(diff_ranges, { u_toks[ua].s, u_toks[ua + uc - 1].e })
+			local last_range = nil
+			for j = 0, uc - 1 do
+				local t = u_toks[ua + j]
+				if last_range and last_range.line == t.line and last_range.end_col == t.sc then
+					last_range.end_col = t.ec
+				else
+					last_range = { line = t.line, start_col = t.sc, end_col = t.ec }
+					table.insert(diff_ranges, last_range)
+				end
+			end
 		else
-			local pos = (ua > 0 and u_toks[ua]) and (u_toks[ua].e + 1) or 0
-			table.insert(diff_ranges, { pos, pos })
+			if ua > 0 and u_toks[ua] then
+				local t = u_toks[ua]
+				table.insert(diff_ranges, { line = t.line, start_col = t.ec, end_col = t.ec })
+			else
+				table.insert(diff_ranges, { line = 0, start_col = 0, end_col = 0 })
+			end
 		end
+
 		if i == 1 then
 			local exp = (s_toks[sb] or { text = "EOF" }).text
 			local fnd = (uc > 0 and u_toks[ua].text) or "MISSING"
@@ -118,6 +104,7 @@ local function compute_diff_ranges(user_out, std_out, obscure)
 			)
 		end
 	end
+
 	return diff_ranges, false, first_msg
 end
 
@@ -125,24 +112,23 @@ end
 -- [COMPILATION] 异步编译模块
 --------------------------------------------------------------------------------
 
---- 异步编译接口
---- @param file_path string 文件绝对路径
---- @param on_compile_finish function 编译完成回调 (success, msg)
 function M.compile(file_path, on_compile_finish)
 	local ext = vim.fn.fnamemodify(file_path, ":e")
-	local vars = get_vars(file_path)
+	local vars = utils.get_vars(file_path)
 	local cmd_raw = M.config.compile_command[ext]
 
-	-- 如果没有配置编译命令，视为自动成功（如 Python）
+	-- 每次编译前重置上次的信息
+	last_compile_msg = nil
+
 	if not cmd_raw or not cmd_raw.exec or cmd_raw.exec == "" then
 		log("No compilation needed for extension: ." .. ext)
 		return on_compile_finish(true, "", false)
 	end
 
-	local exec = expand(cmd_raw.exec, vars)
+	local exec = utils.expand(cmd_raw.exec, vars)
 	local args = {}
 	for _, a in ipairs(cmd_raw.args or {}) do
-		table.insert(args, (expand(a, vars)))
+		table.insert(args, (utils.expand(a, vars)))
 	end
 
 	log("Compiling:", exec, table.concat(args, " "))
@@ -164,17 +150,28 @@ function M.compile(file_path, on_compile_finish)
 			handle:close()
 		end
 
+		-- 处理编译器的输出并去除首尾空白
+		local msg = table.concat(err_chunks):match("^%s*(.-)%s*$")
+		if msg and msg ~= "" then
+			last_compile_msg = msg
+		end
+
 		log("Compilation exited with code:", code)
 		if code == 0 then
-			on_compile_finish(true, "", true)
+			-- 编译成功也返回保存的信息（比如编译器警告）
+			on_compile_finish(true, last_compile_msg or "", true)
 		else
-			on_compile_finish(false, table.concat(err_chunks), true)
+			-- 编译失败
+			on_compile_finish(false, last_compile_msg or "Compilation failed without output", true)
 		end
 	end)
 
 	if not handle then
 		log("Compile spawn error:", spawn_err)
-		return on_compile_finish(false, "Spawn error: " .. tostring(spawn_err), true)
+		if stderr and not stderr:is_closing() then
+			stderr:close()
+		end
+		return on_compile_finish(false, "Spawn error: " .. tostring(spawn_err))
 	end
 
 	stderr:read_start(function(_, d)
@@ -189,10 +186,10 @@ end
 --------------------------------------------------------------------------------
 
 local function run_single_task(cmd_raw, vars, input, std_out, tl, ml_mb, cb)
-	local exec = expand(cmd_raw.exec, vars)
+	local exec = utils.expand(cmd_raw.exec, vars)
 	local args = {}
 	for _, a in ipairs(cmd_raw.args or {}) do
-		table.insert(args, (expand(a, vars)))
+		table.insert(args, (utils.expand(a, vars)))
 	end
 
 	local out_chunks, err_chunks = {}, {}
@@ -221,7 +218,6 @@ local function run_single_task(cmd_raw, vars, input, std_out, tl, ml_mb, cb)
 		end
 		local duration = math.floor((uv.hrtime() - start_time) / 1e6)
 
-		-- 内存统计兼容性处理
 		local used_kb = 0
 		if handle.get_rusage then
 			local rusage = handle:get_rusage()
@@ -242,6 +238,8 @@ local function run_single_task(cmd_raw, vars, input, std_out, tl, ml_mb, cb)
 		end
 
 		local user_out = table.concat(out_chunks):gsub("\r\n", "\n")
+
+		-- 默认情况下带上编译阶段产生的信息（如果有）
 		local res = {
 			input = input,
 			output = user_out,
@@ -250,13 +248,22 @@ local function run_single_task(cmd_raw, vars, input, std_out, tl, ml_mb, cb)
 			used_memory = used_kb,
 			state = { type = "AC" },
 		}
+		if M.config.warning_msg then
+			res.state.msg = last_compile_msg
+		end
 
-		if is_killed or signal ~= 0 or duration > tl then
+		-- TLE判定：仅当超时时，或是被定时器结束 (去除 signal ~= 0 避免掩盖 RE)
+		if is_killed or duration > tl then
 			res.state = { type = "TLE" }
 		elseif ml_mb > 0 and (used_kb / 1024) > ml_mb then
 			res.state = { type = "MLE" }
-		elseif code ~= 0 then
-			res.state = { type = "RE", msg = table.concat(err_chunks) }
+		elseif code ~= 0 or signal ~= 0 then
+			-- RE判定：正常捕获崩溃信号及异常返回码
+			local re_msg = table.concat(err_chunks):match("^%s*(.-)%s*$")
+			if not re_msg or re_msg == "" then
+				re_msg = string.format("Runtime Error (code: %d, signal: %d)", code, signal)
+			end
+			res.state = { type = "RE", msg = re_msg }
 		else
 			local diffs, ok, msg = compute_diff_ranges(user_out, std_out, M.config.obscure)
 			if not ok then
@@ -268,7 +275,22 @@ local function run_single_task(cmd_raw, vars, input, std_out, tl, ml_mb, cb)
 	end)
 
 	if not handle then
-		return cb({ state = { type = "RE", msg = "Spawn error: " .. tostring(spawn_err) } })
+		-- 避免句柄泄漏优化
+		if stdin and not stdin:is_closing() then
+			stdin:close()
+		end
+		if stdout and not stdout:is_closing() then
+			stdout:close()
+		end
+		if stderr and not stderr:is_closing() then
+			stderr:close()
+		end
+
+		return cb({
+			state = { type = "RE", msg = "Spawn error: " .. tostring(spawn_err) },
+			used_time = 0,
+			used_memory = 0,
+		})
 	end
 
 	timer = uv.new_timer()
@@ -283,6 +305,7 @@ local function run_single_task(cmd_raw, vars, input, std_out, tl, ml_mb, cb)
 	else
 		stdin:close()
 	end
+
 	stdout:read_start(function(_, d)
 		if d then
 			table.insert(out_chunks, d)
@@ -299,13 +322,9 @@ end
 -- [PUBLIC API] 公开接口
 --------------------------------------------------------------------------------
 
---- 执行所有测试用例
---- @param file_path string 文件绝对路径
---- @param json table 包含 tests, timeLimit, memoryLimit
---- @param on_case_finish function 每个用例完成后的回调
 function M.run(file_path, json, on_case_finish)
 	local ext = vim.fn.fnamemodify(file_path, ":e")
-	local vars = get_vars(file_path)
+	local vars = utils.get_vars(file_path)
 	local run_cmd = M.config.run_command[ext]
 	local tests = json.tests or {}
 
@@ -340,10 +359,9 @@ function M.run(file_path, json, on_case_finish)
 	fill_queue()
 end
 
---- 初始化配置
---- @param cfg table
 function M.setup(cfg)
 	M.config = cfg
+	utils.setup(cfg)
 	log("Runner module initialized.")
 end
 

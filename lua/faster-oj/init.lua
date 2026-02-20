@@ -11,7 +11,7 @@ local M = {}
 M.config = default_config.config
 
 local function log(...)
-	if M.config.server_debug then
+	if M.config.debug then
 		print("[FOJ]", ...)
 	end
 end

@@ -6,7 +6,7 @@ local server = nil
 local clients = {}
 
 local function log(...)
-	if M.config.server_debug then
+	if M.config.debug then
 		print("[FOJ][http]", ...)
 	end
 end

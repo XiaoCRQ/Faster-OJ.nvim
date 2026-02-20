@@ -15,10 +15,6 @@
   "xiaocrq/faster-oj.nvim",
   opts = {
   },
-  config = function(_, opts)
-    local oj = require("faster-oj")
-    oj.setup(opts)
-  end,
 },
 ```
 

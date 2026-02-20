@@ -1,34 +1,99 @@
+---@class FOJ.Config
+---@field http_host string HTTP 服务器地址
+---@field http_port integer HTTP 服务器端口
+---@field ws_host string WebSocket 服务器地址
+---@field ws_port integer WebSocket 服务器端口
+---@field debug boolean 是否开启调试模式
+---@field server_mod '"only_http"'|'"only_ws"'|'"all"' 服务器启动模式
+---@field json_dir string 题目数据存储目录
+---@field code_obfuscator table<string, fun(code:string):string> 代码混淆器
+---@field obscure boolean 是否启用模糊匹配
+---@field warning_msg boolean 判题时是否输出警告信息
+---@field max_workers integer 最大并发测题数量
+---@field ui FOJ.UIConfig UI 布局配置
+---@field highlights FOJ.HighlightConfig 高亮颜色配置
+---@field compile_command table<string, FOJ.Command> 编译命令表
+---@field run_command table<string, FOJ.Command> 运行命令表
+
+---@class FOJ.UIConfig
+---@field width number UI 宽度比例 (0~1)
+---@field height number UI 高度比例 (0~1)
+---@field layout table UI 布局结构
+
+---@class FOJ.HighlightConfig
+---@field Header string 标题颜色
+---@field Correct string 正确颜色
+---@field Warning string 警告颜色
+---@field Wrong string 错误颜色
+
+---@class FOJ.Command
+---@field exec string 可执行程序
+---@field args? string[] 参数列表
+
 local M = {}
 
+---@type FOJ.Config
 M.config = {
+
+	------------------------------------------------------------------
+	-- 🌐 Server Configuration
+	------------------------------------------------------------------
 	http_host = "127.0.0.1",
 	http_port = 10043,
 	ws_host = "127.0.0.1",
 	ws_port = 10044,
 
-	server_debug = false,
-	server_mod = "all", -- only_http | only_ws | all
+	debug = false, -- Debug mode
+	server_mod = "all", -- "only_http" | "only_ws" | "all"
 
-	json_dir = ".problem/json",
-	code_obfuscator = "",
-	obscure = true,
+	------------------------------------------------------------------
+	-- 📂 Storage
+	------------------------------------------------------------------
+	json_dir = ".problem", -- Problem data directory
 
-	max_workers = 5,
-	output_max_chars = 50,
-	output_max_lines = 100,
+	code_obfuscator = {}, -- Language -> obfuscator function
+	obscure = true, -- Enable fuzzy matching
 
+	warning_msg = false, -- Show warnings while judging
+	max_workers = 5, -- Max parallel judging workers
+
+	------------------------------------------------------------------
+	-- 🖥 UI Configuration
+	------------------------------------------------------------------
 	ui = {
 		width = 0.9,
 		height = 0.9,
+
+		-- Layout tree:
+		-- {
+		--   { ratio, "window_key" }
+		--   { ratio, { { ratio, "window_key" }, ... } }
+		-- }
 		layout = {
-			{ 2, "Testcases" },
-			{ 5, { { 1, "Input" }, { 1, "Output" } } },
-			{ 5, { { 1, "Info" }, { 1, "Expected Output" } } },
+			{ 4, "tc" },
+			{ 5, { { 1, "si" }, { 1, "so" } } },
+			{ 5, { { 1, "info" }, { 1, "eo" } } },
 		},
+		-- tc   = Testcases
+		-- si   = Standard Input
+		-- so   = Standard Output
+		-- info = Info Panel
+		-- eo   = Expected Output
 	},
 
-	highlights = {},
+	------------------------------------------------------------------
+	-- 🎨 Highlight Groups
+	------------------------------------------------------------------
+	highlights = {
+		Header = "#c0c0c0",
+		Correct = "#00ff00",
+		Warning = "orange",
+		Wrong = "orange",
+	},
 
+	------------------------------------------------------------------
+	-- 🛠 Compile Commands
+	------------------------------------------------------------------
 	compile_command = {
 
 		-- C
@@ -141,9 +206,12 @@ M.config = {
 		},
 	},
 
+	------------------------------------------------------------------
+	-- ▶ Run Commands
+	------------------------------------------------------------------
 	run_command = {
 
-		-- 本地编译型
+		-- Native compiled
 		c = { exec = "$(DIR)/$(FNOEXT)" },
 		cpp = { exec = "$(DIR)/$(FNOEXT)" },
 		rust = { exec = "$(DIR)/$(FNOEXT)" },
@@ -176,7 +244,7 @@ M.config = {
 			args = { "$(FABSPATH)" },
 		},
 
-		-- TypeScript（需 ts-node）
+		-- TypeScript (requires ts-node)
 		typescript = {
 			exec = "ts-node",
 			args = { "$(FABSPATH)" },

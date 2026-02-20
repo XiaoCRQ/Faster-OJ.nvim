@@ -8,7 +8,7 @@ M.pipe = {
 }
 
 local function log(...)
-	if M.config and M.config.server_debug then
+	if M.config and M.config.debug then
 		print("[FOJ][ws]", ...)
 	end
 end
