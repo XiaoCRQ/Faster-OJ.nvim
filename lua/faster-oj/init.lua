@@ -33,7 +33,7 @@ function M.setup(opts)
 			sub_cmd = table.concat(vim.list_slice(args, 2), " ")
 		end
 
-		if cmd == "server" or cmd == "sv" then
+		if cmd == "start" then
 			if sub_cmd then
 				M.start(sub_cmd)
 			else

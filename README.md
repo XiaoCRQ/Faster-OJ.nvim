@@ -98,8 +98,7 @@ Online Judge
 ### 🔌 启动服务
 
 ```vim
-:FOJ server
-:FOJ sv
+:FOJ start
 ```
 
 * 启动本地服务
