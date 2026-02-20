@@ -34,12 +34,16 @@ function M.setup(opts)
 		end
 
 		if cmd == "server" or cmd == "sv" then
-			if sub_cmd and sub_cmd:lower() == "stop" then
-				M.stop("all")
-			elseif sub_cmd then
+			if sub_cmd then
 				M.start(sub_cmd)
 			else
 				M.start(nil)
+			end
+		elseif cmd == "stop" then
+			if sub_cmd then
+				M.stop(sub_cmd)
+			else
+				M.stop(nil)
 			end
 		elseif cmd == "submit" or cmd == "sb" then
 			featrue.submit({
@@ -72,13 +76,13 @@ function M.start(mod)
 		ws_server.start()
 		print("[FOJ] The WS server has been turned ON")
 	elseif mod == "all" then
-		if http_server.is_open() and ws_server.is_open() then
-			M.stop("all")
-		else
-			http_server.start()
-			ws_server.start()
-			print("[FOJ] The ALL server has been turned ON")
-		end
+		-- if http_server.is_open() and ws_server.is_open() then
+		-- M.stop("all")
+		-- else
+		http_server.start()
+		ws_server.start()
+		print("[FOJ] The ALL server has been turned ON")
+		-- end
 	else
 		error("Invalid server_mod: " .. tostring(mod))
 	end
