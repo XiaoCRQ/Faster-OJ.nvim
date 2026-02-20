@@ -17,6 +17,8 @@
 * 🖥️ **本地判题服务器**
   内置本地服务启动与管理功能
 
+  * `WebSocket` 实现采用 [mini-wsbroad](https://github.com/XiaoCRQ/mini-wsbroad)
+
 * 🧪 **快速测试**
   编译、运行、查看输出一体化操作
 
@@ -63,10 +65,10 @@ Online Judge
 ## 📦 前置插件
 
 * 🌐 浏览器自动提交插件
-  **Faster-OJ**
+  **[Faster-OJ](https://github.com/XiaoCRQ/Faster-OJ)**
 
 * 📥 浏览器题目接收插件
-  **competitive-companion**
+  **[competitive-companion](https://github.com/jmerle/competitive-companion)**
 
 ---
 
