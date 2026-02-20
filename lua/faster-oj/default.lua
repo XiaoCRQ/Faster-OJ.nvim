@@ -3,6 +3,7 @@
 ---@field http_port integer HTTP 服务器端口
 ---@field ws_host string WebSocket 服务器地址
 ---@field ws_port integer WebSocket 服务器端口
+---@field max_time_out integer 浏览器连接最大时间
 ---@field debug boolean 是否开启调试模式
 ---@field server_mod '"only_http"'|'"only_ws"'|'"all"' 服务器启动模式
 ---@field work_dir string 工作目录
@@ -48,6 +49,8 @@ M.config = {
 	http_port = 10043,
 	ws_host = "127.0.0.1",
 	ws_port = 10044,
+
+	max_time_out = 3,
 
 	debug = false, -- Debug mode
 	server_mod = "all", -- "only_http" | "only_ws" | "all"

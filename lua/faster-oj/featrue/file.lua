@@ -12,7 +12,7 @@ local function log(...)
 	end
 end
 
-function M.submit(send)
+function M.submit(ws)
 	local file_path = utils.get_file_path()
 	if file_path == "" then
 		log("No active file")
@@ -66,7 +66,9 @@ function M.submit(send)
 
 	log("Submit JSON generated:", tmp_path)
 
-	send("broadcast " .. tmp_path)
+	ws.wait_for_connection(M.config.max_time_out, function()
+		ws.send("broadcast " .. tmp_path)
+	end)
 end
 
 return M

@@ -42,7 +42,10 @@ function M.setup(opts)
 				M.start(nil)
 			end
 		elseif cmd == "submit" or cmd == "sb" then
-			featrue.submit(ws_server.send)
+			featrue.submit({
+				wait_for_connection = ws_server.wait_for_connection,
+				send = ws_server.send,
+			})
 		elseif cmd == "test" or cmd == "run" then
 			featrue.run()
 		elseif cmd == "show" then
