@@ -46,7 +46,7 @@ Online Judge
 
 ### 1️⃣ 接收题目
 
-通过浏览器插件 **competitive-companion** 接收题目数据。
+通过浏览器插件 `competitive-companion` 接收题目数据。
 
 ### 2️⃣ 本地开发
 
@@ -89,7 +89,7 @@ Online Judge
 
 默认配置文件：
 
-👉 [https://github.com/XiaoCRQ/Faster-OJ.nvim/lua/faster-oj/default.lua](https://github.com/XiaoCRQ/Faster-OJ.nvim/lua/faster-oj/default.lua)
+👉 [https://github.com/XiaoCRQ/Faster-OJ.nvim/blob/main/lua/faster-oj/default.lua](https://github.com/XiaoCRQ/Faster-OJ.nvim/blob/main/lua/faster-oj/default.lua)
 
 如无特殊需求，开箱即用。
 
@@ -159,7 +159,7 @@ Online Judge
 | 本地测试 | ✅       | ✅     | ✅     |
 | 提交题目 | 🚧      | ✅     | 🚧    |
 
-> 提交功能依赖浏览器插件运行环境。
+> 提交功能依赖 `WebSocket` 实现程序。
 
 ---
 
