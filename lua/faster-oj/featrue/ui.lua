@@ -1,5 +1,28 @@
+-- ================================================================
+-- FOJ UI Module
+-- ================================================================
+-- 负责：
+--   1. 构建测试用例窗口（Testcases / Input / Output / Info / Expected Output）
+--   2. 高亮显示 AC / WA / Warning
+--   3. 异步更新测试用例状态与输出
+--   4. 自动刷新详情窗口
+-- ================================================================
+
+---@module "faster-oj.featrue.ui"
+
+---@class FOJUI
+---@field config table 用户配置
+---@field state table 内部状态
+---   state.wins integer[] 窗口句柄列表
+---   state.bufs integer[] 缓冲区列表
+---   state.augroup integer? 自动命令组
+---   state.size integer 测试用例数量
+---   state.testcases table 测试用例状态列表，元素结构同 FOJ.RunResult
 local M = {}
 
+-- ================================================================
+-- 常量与默认配置
+-- ================================================================
 local TITLES = { tc = "Testcases", si = "Input", so = "Output", info = "Info", eo = "Expected Output" }
 local WIN_CONFIGS = {
 	tc = { number = false, focus = true },
@@ -23,6 +46,10 @@ M.state = {
 	testcases = {},
 }
 
+-- ================================================================
+-- 📝 Setup 高亮与配置
+-- ================================================================
+---@param cfg table 用户配置，包含 highlights 字段
 function M.setup(cfg)
 	M.config = cfg
 	local hl = cfg.highlights or { Correct = "#00ff00", Warning = "orange", Wrong = "#ff0000", Header = "#808080" }
@@ -32,9 +59,10 @@ function M.setup(cfg)
 	vim.api.nvim_set_hl(0, "TestUIHeader", { fg = hl.Header, bold = true })
 end
 
---------------------------------------------------
--- 新增接口：判断窗口是否打开
---------------------------------------------------
+-- ================================================================
+-- 🔹 窗口状态检查
+-- ================================================================
+---@return boolean 是否有窗口处于打开状态
 function M.is_open()
 	if not M.state.wins or #M.state.wins == 0 then
 		return false
@@ -48,9 +76,13 @@ function M.is_open()
 	return false
 end
 
---------------------------------------------------
--- Buffer 和视图更新核心
---------------------------------------------------
+-- ================================================================
+-- 🔹 Buffer 内容更新工具
+-- ================================================================
+---@private
+---@param key string 缓冲区标识 tc/si/so/info/eo
+---@param lines string[] 内容
+---@param highlights table[] 高亮列表 { group:string, line:integer, col_start:integer, col_end:integer }
 local function set_buf_content(key, lines, highlights)
 	local buf = M.state.bufs[key]
 	if not buf or not vim.api.nvim_buf_is_valid(buf) then
@@ -71,6 +103,9 @@ local function set_buf_content(key, lines, highlights)
 	end
 end
 
+-- 更新详细窗口显示
+---@private
+---@param index integer 当前测试用例序号 (0-based)
 local function updata_detail_windows(index)
 	if index <= 0 then
 		return
@@ -105,9 +140,11 @@ local function updata_detail_windows(index)
 	set_buf_content("info", tc.state.msg and vim.split(tc.state.msg, "\n") or {})
 end
 
---------------------------------------------------
--- 异步化接口：数据注入与自动更新
---------------------------------------------------
+-- ================================================================
+-- 🔹 异步更新测试用例状态
+-- ================================================================
+---@param size integer 测试用例数量
+---@param testcases FOJ.RunResult[] 测试用例结果列表
 function M.updata(size, testcases)
 	vim.schedule(function()
 		M.state.size = size
@@ -172,9 +209,10 @@ function M.updata(size, testcases)
 	end)
 end
 
---------------------------------------------------
--- 窗口构建与渲染
---------------------------------------------------
+-- ================================================================
+-- 🔹 窗口构建与渲染
+-- ================================================================
+---@private
 local function open_win(key, area)
 	local buf = M.state.bufs[key]
 	local conf = WIN_CONFIGS[key]
@@ -224,6 +262,9 @@ local function open_win(key, area)
 	table.insert(M.state.wins, win)
 end
 
+-- 渲染多窗口布局
+---@param layout table 窗口布局配置
+---@param area table 可用区域 { row, col, width, height }
 function M.render_layout(layout, area)
 	local total_w = 0
 	for _, n in ipairs(layout) do
@@ -251,9 +292,9 @@ function M.render_layout(layout, area)
 	end
 end
 
---------------------------------------------------
--- 异步化接口：显示与关闭
---------------------------------------------------
+-- ================================================================
+-- 🔹 窗口显示 / 关闭 / 清空
+-- ================================================================
 function M.show()
 	vim.schedule(function()
 		-- 清理旧窗口，防止重复打开
@@ -309,9 +350,9 @@ function M.clear()
 	end)
 end
 
---------------------------------------------------
--- Resize 监听机制
---------------------------------------------------
+-- ================================================================
+-- 🔹 窗口 Resize 监听
+-- ================================================================
 function M.setup_resize()
 	if M.state.augroup then
 		return

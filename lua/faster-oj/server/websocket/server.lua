@@ -1,11 +1,45 @@
+-- ================================================================
+-- FOJ WebSocket 服务模块
+-- ================================================================
+-- 功能：
+--   1. 启动/停止本地 WebSocket 进程（mini-wsbroad）
+--   2. 管理 stdin/stdout/stderr 管道
+--   3. 查询连接状态
+--   4. 异步等待客户端连接
+-- ================================================================
+
+---@module "faster-oj.server.ws"
+
 local uv = vim.uv or vim.loop
 local M = {}
 
+--- 可选回调函数，收到 stdout 输出时触发
+---@type fun(data:string)?
+M.on_message = nil
+--- 可选回调函数，收到 stderr 输出时触发
+---@type fun(data:string)?
+M.on_err = nil
+
+---@class FOJWSModule
+---@field handle userdata|nil 运行的进程句柄
+---@field pipe table 管道表，包含 stdin/stdout/stderr
+---@field connections number 当前连接的客户端数量
 M.handle = nil
 M.pipe = { stdin = nil, stdout = nil, stderr = nil }
 M.connections = 0 -- 存储当前连接数
 
--- 获取二进制程序路径
+-- ================================================================
+-- 🔹 内部工具
+-- ================================================================
+
+---@private
+local function log(...)
+	if M.config and M.config.debug then
+		print("[FOJ][ws]", ...)
+	end
+end
+
+---@private
 local function get_bin_path()
 	-- 获取当前脚本所在目录
 	local script_path = debug.getinfo(1).source:sub(2)
@@ -15,13 +49,15 @@ local function get_bin_path()
 	return bin_dir .. "/" .. bin_name
 end
 
-local function log(...)
-	if M.config and M.config.debug then
-		print("[FOJ][ws]", ...)
-	end
-end
--- [FOJ][ws] WebSocket server exited 0 6
+-- ================================================================
+-- 🔹 公共接口
+-- ================================================================
 
+--- 初始化模块
+---@param cfg table 配置项
+---   cfg.ws_host string WebSocket 服务绑定地址（可选，默认 127.0.0.1）
+---   cfg.ws_port number WebSocket 服务端口（可选，默认 10044）
+---   cfg.debug boolean 是否打印调试信息
 function M.setup(cfg)
 	M.config = cfg or {}
 
@@ -41,6 +77,8 @@ function M.setup(cfg)
 	})
 end
 
+--- 检查 WebSocket 服务是否运行
+---@return boolean
 function M.is_open()
 	return M.handle ~= nil
 end
@@ -108,7 +146,8 @@ function M.request_status()
 	M.send("status")
 end
 
--- 获取本地缓存的连接数
+--- 获取本地缓存的连接数
+---@return number
 function M.get_connection_count()
 	return M.connections
 end
@@ -134,6 +173,8 @@ function M.stop()
 	end)
 end
 
+--- 发送命令到 WebSocket 服务
+---@param text string
 function M.send(text)
 	if M.pipe and M.pipe.stdin then
 		M.pipe.stdin:write(text .. "\n")

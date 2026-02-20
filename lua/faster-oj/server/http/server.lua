@@ -1,16 +1,38 @@
+-- ================================================================
+-- FOJ HTTP Server Module
+-- ================================================================
+-- 功能：
+--   1. 启动一个 TCP HTTP 服务器
+--   2. 接收客户端 JSON 请求并转发到 handler 模块
+--   3. 自动管理客户端连接
+-- ================================================================
+
+---@module "faster-oj.server.http"
+
 local uv = vim.uv or vim.loop
 local handler = require("faster-oj.server.http.handler")
 local M = {}
 
-local server = nil
-local clients = {}
+---@private
+local server = nil -- uv_tcp 服务器实例
+---@private
+local clients = {} -- uv_tcp 客户端列表
 
+-- ================================================================
+-- 🔹 内部日志工具
+-- ================================================================
+---@private
 local function log(...)
 	if M.config.debug then
 		print("[FOJ][http]", ...)
 	end
 end
 
+-- ================================================================
+-- 🔹 内部工具：移除客户端
+-- ================================================================
+---@private
+---@param c uv_tcp 客户端句柄
 local function remove_client(c)
 	for i, v in ipairs(clients) do
 		if v == c then
@@ -20,14 +42,28 @@ local function remove_client(c)
 	end
 end
 
+-- ================================================================
+-- 🔹 配置
+-- ================================================================
+---@param cfg table 配置表
+---   cfg.http_host string HTTP 监听地址
+---   cfg.http_port integer HTTP 监听端口
+---   cfg.debug boolean 是否打印调试日志
 function M.setup(cfg)
 	M.config = cfg or {}
 end
 
+-- ================================================================
+-- 🔹 状态查询
+-- ================================================================
+---@return boolean 是否服务器正在运行
 function M.is_open()
 	return server ~= nil
 end
 
+-- ================================================================
+-- 🔹 启动 HTTP Server
+-- ================================================================
 function M.start()
 	if M.is_open() then
 		log("HTTP server already running")
@@ -95,6 +131,9 @@ function M.start()
 	log("HTTP server listening on " .. host .. ":" .. port)
 end
 
+-- ================================================================
+-- 🔹 启动 HTTP Server
+-- ================================================================
 function M.stop()
 	if not M.is_open() then
 		return

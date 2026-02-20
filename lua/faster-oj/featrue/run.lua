@@ -1,5 +1,36 @@
---- @class FOJRunner
---- @field config table 用户配置表
+-- ================================================================
+-- FOJ Runner Module
+-- ================================================================
+-- 负责：
+--   1. 异步编译代码
+--   2. 异步执行代码
+--   3. 处理 TLE / MLE / WA / RE 等判题结果
+--   4. 生成高亮 diff 信息（可选）
+-- ================================================================
+
+---@module "faster-oj.featrue.run"
+
+---@class FOJRunner
+---@field config FOJ.Config 用户配置表
+---@field compile fun(file_path:string, on_compile_finish:fun(success:boolean, msg:string, need:boolean))
+---@field run fun(file_path:string, json:table, on_case_finish:fun(res:FOJ.RunResult))
+---@field setup fun(cfg:FOJ.Config)
+
+---@class FOJ.RunResult
+---@field test_index integer 测试用例序号 (1-based)
+---@field input string 当前测试用例输入
+---@field output string 用户程序输出
+---@field expected string 题目标准输出
+---@field used_time integer 单位毫秒
+---@field used_memory integer 单位 KB
+---@field state table 判题结果
+---   state.type string "AC" | "WA" | "TLE" | "MLE" | "RE"
+---   state.msg? string 错误或提示信息（WA/RE 时）
+---@field diff? table 高亮差异列表
+---   diff[#].line integer 行号 (0-based)
+---   diff[#].start_col integer 开始列 (0-based)
+---   diff[#].end_col integer 结束列 (0-based)
+
 local M = {}
 
 local uv = vim.uv or vim.loop
@@ -22,7 +53,10 @@ end
 -- [CORE] 差异与二维高亮坐标计算
 --------------------------------------------------------------------------------
 
---- 将字符串按行分割，计算每个 token 的 2D 高亮坐标 (0-based, 前闭后开)
+---将字符串按行分割并计算每个 token 的二维坐标
+---@param str string 输入字符串
+---@param obscure boolean 是否模糊匹配 token
+---@return table tokens { text:string, line:integer, sc:integer, ec:integer }[]
 local function get_tokens_with_coords(str, obscure)
 	local tokens = {}
 	local lines = vim.split(str, "\n", { plain = true })
@@ -41,7 +75,13 @@ local function get_tokens_with_coords(str, obscure)
 	return tokens
 end
 
---- 计算并合并高亮区间
+---计算用户输出和标准输出的差异区间
+---@param user_out string 用户输出
+---@param std_out string 标准输出
+---@param obscure boolean 是否模糊匹配
+---@return table|nil diff_ranges 差异高亮区间
+---@return boolean ok 是否完全匹配
+---@return string first_msg 第一个差异提示信息
 local function compute_diff_ranges(user_out, std_out, obscure)
 	local u_toks = get_tokens_with_coords(user_out, obscure)
 	local s_toks = get_tokens_with_coords(std_out, obscure)
@@ -112,6 +152,9 @@ end
 -- [COMPILATION] 异步编译模块
 --------------------------------------------------------------------------------
 
+---异步编译指定文件
+---@param file_path string 文件路径
+---@param on_compile_finish fun(success:boolean, msg:string, need:boolean) 编译完成回调
 function M.compile(file_path, on_compile_finish)
 	local ext = vim.fn.fnamemodify(file_path, ":e")
 	local vars = utils.get_vars(file_path)
@@ -184,6 +227,15 @@ end
 --------------------------------------------------------------------------------
 -- [EXECUTION] 异步执行模块
 --------------------------------------------------------------------------------
+
+---内部执行单个测试用例
+---@private
+-- 这里省略内部实现注释，保留完整逻辑
+-- 核心功能：
+-- 1. 执行程序
+-- 2. 捕获输出、错误
+-- 3. 处理 TLE / MLE / RE / WA / AC
+-- 4. 调用 cb(res)
 local function run_single_task(cmd_raw, vars, input, std_out, tl, ml_mb, cb)
 	local user_exec = utils.expand(cmd_raw.exec, vars)
 	local user_args = {}
@@ -345,6 +397,14 @@ end
 -- [PUBLIC API] 公开接口
 --------------------------------------------------------------------------------
 
+---异步执行指定文件的所有测试用例
+---
+---@param file_path string 待执行文件路径
+---@param json table 包含测试用例的 JSON 对象，必须包含 fields:
+---   - tests table 测试用例列表，每项 { input:string, output:string }
+---   - timeLimit integer 时间限制 ms
+---   - memoryLimit integer 内存限制 MB
+---@param on_case_finish fun(res:FOJ.RunResult) 单个测试用例完成回调
 function M.run(file_path, json, on_case_finish)
 	local ext = vim.fn.fnamemodify(file_path, ":e")
 	local vars = utils.get_vars(file_path)
@@ -382,6 +442,8 @@ function M.run(file_path, json, on_case_finish)
 	fill_queue()
 end
 
+---初始化 Runner 模块
+---@param cfg FOJ.Config 用户配置
 function M.setup(cfg)
 	M.config = cfg
 	utils.setup(cfg)

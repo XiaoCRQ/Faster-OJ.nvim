@@ -64,8 +64,8 @@ M.config = {
 	template_default = "",
 	template_default_ext = ".cpp",
 
-	linux_mem_offset = -2900,
-	macos_mem_offset = -1500,
+	linux_mem_offset = -2900, -- kb
+	macos_mem_offset = -1500, -- kb
 
 	code_obfuscator = {}, -- Language -> obfuscator function
 	obscure = true, -- Enable fuzzy matching
