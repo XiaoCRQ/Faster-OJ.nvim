@@ -184,12 +184,39 @@ end
 --------------------------------------------------------------------------------
 -- [EXECUTION] 异步执行模块
 --------------------------------------------------------------------------------
-
 local function run_single_task(cmd_raw, vars, input, std_out, tl, ml_mb, cb)
-	local exec = utils.expand(cmd_raw.exec, vars)
-	local args = {}
+	local user_exec = utils.expand(cmd_raw.exec, vars)
+	local user_args = {}
 	for _, a in ipairs(cmd_raw.args or {}) do
-		table.insert(args, (utils.expand(a, vars)))
+		table.insert(user_args, (utils.expand(a, vars)))
+	end
+
+	local final_exec = user_exec
+	local final_args = user_args
+
+	if is_win then
+		local joined_args = table.concat(user_args, " ")
+		local ps_script = string.format(
+			"$p = Start-Process -FilePath '%s' -ArgumentList '%s' -NoNewWindow -PassThru -Wait; "
+				.. "[Console]::Error.WriteLine('MEM_PEAK:' + $p.PeakWorkingSet64); "
+				.. "exit $p.ExitCode",
+			user_exec,
+			joined_args
+		)
+		final_exec = "powershell"
+		final_args = { "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script }
+	elseif is_mac or vim.fn.has("unix") == 1 then
+		local time_cmd = "/usr/bin/time"
+		local time_args = is_mac and { "-l" } or { "-v" }
+		final_exec = time_cmd
+		final_args = {}
+		for _, v in ipairs(time_args) do
+			table.insert(final_args, v)
+		end
+		table.insert(final_args, user_exec)
+		for _, v in ipairs(user_args) do
+			table.insert(final_args, v)
+		end
 	end
 
 	local out_chunks, err_chunks = {}, {}
@@ -200,14 +227,13 @@ local function run_single_task(cmd_raw, vars, input, std_out, tl, ml_mb, cb)
 
 	local function safe_kill()
 		if handle and not handle:is_closing() then
-			log("Process TLE, killing...")
 			is_killed = true
 			handle:kill(is_win and 15 or 9)
 		end
 	end
 
-	handle, spawn_err = uv.spawn(exec, {
-		args = args,
+	handle, spawn_err = uv.spawn(final_exec, {
+		args = final_args,
 		cwd = vars.DIR,
 		stdio = { stdin, stdout, stderr },
 		hide = true,
@@ -217,15 +243,6 @@ local function run_single_task(cmd_raw, vars, input, std_out, tl, ml_mb, cb)
 			timer:close()
 		end
 		local duration = math.floor((uv.hrtime() - start_time) / 1e6)
-
-		local used_kb = 0
-		if handle.get_rusage then
-			local rusage = handle:get_rusage()
-			used_kb = rusage and rusage.maxrss or 0
-			if is_mac then
-				used_kb = math.floor(used_kb / 1024)
-			end
-		end
 
 		if stdout and not stdout:is_closing() then
 			stdout:close()
@@ -238,32 +255,55 @@ local function run_single_task(cmd_raw, vars, input, std_out, tl, ml_mb, cb)
 		end
 
 		local user_out = table.concat(out_chunks):gsub("\r\n", "\n")
+		local raw_err = table.concat(err_chunks)
 
-		-- 默认情况下带上编译阶段产生的信息（如果有）
+		-- [PARSING] 解析内存峰值
+		local max_rss_kb = 0
+		local clean_err = raw_err
+
+		if is_win then
+			-- 解析 PowerShell 输出的 MEM_PEAK:数值 (单位 Bytes)
+			local val = raw_err:match("MEM_PEAK:(%d+)")
+			if val then
+				max_rss_kb = math.floor(tonumber(val) / 1024)
+				clean_err = raw_err:gsub("MEM_PEAK:%d+[\r\n]*", "")
+			end
+		elseif is_mac then
+			local val = raw_err:match("(%d+)%s+maximum resident set size")
+			if val then
+				max_rss_kb = math.floor(tonumber(val) / 1024)
+				clean_err = raw_err:gsub("%d+%s+maximum resident set size.*", "")
+			end
+		else -- Linux
+			local val = raw_err:match("Maximum resident set size %(kbytes%): (%d+)")
+			if val then
+				max_rss_kb = tonumber(val)
+				clean_err =
+					raw_err:gsub("Command exited with non%-zero status.*", ""):gsub("\tMaximum resident set size.*", "")
+			end
+		end
+
 		local res = {
 			input = input,
 			output = user_out,
 			expected = std_out,
 			used_time = duration,
-			used_memory = used_kb,
+			used_memory = max_rss_kb,
 			state = { type = "AC" },
 		}
-		if M.config.warning_msg then
-			res.state.msg = last_compile_msg
+		if is_mac then
+			res.used_memory = res.used_memory + M.config.macos_mem_offset
+		elseif not is_win then
+			res.used_memory = res.used_memory + M.config.linux_mem_offset
 		end
 
-		-- TLE判定：仅当超时时，或是被定时器结束 (去除 signal ~= 0 避免掩盖 RE)
-		if is_killed or duration > tl then
-			res.state = { type = "TLE" }
-		elseif ml_mb > 0 and (used_kb / 1024) > ml_mb then
+		-- 判定逻辑
+		if ml_mb > 0 and (max_rss_kb / 1024) > ml_mb then
 			res.state = { type = "MLE" }
+		elseif is_killed or duration > tl then
+			res.state = { type = "TLE" }
 		elseif code ~= 0 or signal ~= 0 then
-			-- RE判定：正常捕获崩溃信号及异常返回码
-			local re_msg = table.concat(err_chunks):match("^%s*(.-)%s*$")
-			if not re_msg or re_msg == "" then
-				re_msg = string.format("Runtime Error (code: %d, signal: %d)", code, signal)
-			end
-			res.state = { type = "RE", msg = re_msg }
+			res.state = { type = "RE", msg = clean_err:match("^%s*(.-)%s*$") or "Runtime Error" }
 		else
 			local diffs, ok, msg = compute_diff_ranges(user_out, std_out, M.config.obscure)
 			if not ok then
@@ -274,28 +314,11 @@ local function run_single_task(cmd_raw, vars, input, std_out, tl, ml_mb, cb)
 		cb(res)
 	end)
 
-	if not handle then
-		-- 避免句柄泄漏优化
-		if stdin and not stdin:is_closing() then
-			stdin:close()
-		end
-		if stdout and not stdout:is_closing() then
-			stdout:close()
-		end
-		if stderr and not stderr:is_closing() then
-			stderr:close()
-		end
-
-		return cb({
-			state = { type = "RE", msg = "Spawn error: " .. tostring(spawn_err) },
-			used_time = 0,
-			used_memory = 0,
-		})
-	end
-
+	-- TLE 定时器
 	timer = uv.new_timer()
-	timer:start(tl + 50, 0, safe_kill)
+	timer:start(tl + 200, 0, safe_kill) -- 略微放宽，因为 PowerShell 启动慢
 
+	-- 输入流处理
 	if input and input ~= "" then
 		stdin:write(input, function()
 			if not stdin:is_closing() then

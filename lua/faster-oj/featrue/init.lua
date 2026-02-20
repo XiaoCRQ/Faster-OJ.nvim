@@ -27,6 +27,8 @@ function M.run()
 	local json = utils.get_json_file()
 	local tests = {}
 
+	vim.cmd("write")
+
 	if json == nil then
 		log("No problem data ...")
 		return
@@ -44,7 +46,9 @@ function M.run()
 		if need then
 			log("Compilation Success!")
 		end
-		ui.show()
+		if not ui.is_open() then
+			ui.show()
+		end
 		runner.run(file_path, json, function(res)
 			tests[res.test_index] = res
 			ui.updata(#json.tests, tests)

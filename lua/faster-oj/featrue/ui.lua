@@ -126,8 +126,12 @@ function M.updata(size, testcases)
 
 			if tc and tc.state then
 				s_type = tc.state.type or "???"
-				time = (tc.used_time or 0) .. "ms"
-				mem = (tc.used_memory or 0) .. "KB"
+				time = (tc.used_time or 0) .. "MS"
+				if tc.used_memory < 1024 then
+					mem = (tc.used_memory or 0) .. "KB"
+				else
+					mem = string.format("%.2f", (tc.used_memory or 0) / 1024) .. "MB"
+				end
 				hl_group = (s_type == "AC") and "TestUICorrect" or "TestUIWrong"
 			end
 

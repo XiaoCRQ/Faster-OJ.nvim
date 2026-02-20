@@ -5,7 +5,13 @@
 ---@field ws_port integer WebSocket 服务器端口
 ---@field debug boolean 是否开启调试模式
 ---@field server_mod '"only_http"'|'"only_ws"'|'"all"' 服务器启动模式
+---@field work_dir string 工作目录
 ---@field json_dir string 题目数据存储目录
+---@field template_dir string 模板数据存储目录
+---@field template_default string 默认模板
+---@field template_default_ext string 默认模板无扩展名时使用的默认扩展名
+---@field linux_mem_offset integer 系统内存偏移量
+---@field macos_mem_offset integer 系统内存偏移量
 ---@field code_obfuscator table<string, fun(code:string):string> 代码混淆器
 ---@field obscure boolean 是否启用模糊匹配
 ---@field warning_msg boolean 判题时是否输出警告信息
@@ -49,7 +55,14 @@ M.config = {
 	------------------------------------------------------------------
 	-- 📂 Storage
 	------------------------------------------------------------------
+	work_dir = "", -- Work directory
 	json_dir = ".problem", -- Problem data directory
+	template_dir = "", -- Template data directory
+	template_default = "",
+	template_default_ext = ".cpp",
+
+	linux_mem_offset = -2900,
+	macos_mem_offset = -1500,
 
 	code_obfuscator = {}, -- Language -> obfuscator function
 	obscure = true, -- Enable fuzzy matching
@@ -88,7 +101,7 @@ M.config = {
 		Header = "#c0c0c0",
 		Correct = "#00ff00",
 		Warning = "orange",
-		Wrong = "orange",
+		Wrong = "red",
 	},
 
 	------------------------------------------------------------------

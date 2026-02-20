@@ -19,6 +19,18 @@ function M.submit(send)
 		return
 	end
 
+	if M.config.code_obfuscator then
+		local cmd = M.config.code_obfuscator
+		local os_code = cmd.file_path
+		local vars = utils.get_vars(file_path)
+		local exec = utils.expand(cmd.exec, vars)
+		local args = {}
+		for _, a in ipairs(cmd.args or {}) do
+			table.insert(args, (utils.expand(a, vars)))
+		end
+		-- TODO: code混淆器
+	end
+
 	local code = utils.read_file(file_path)
 	if not code then
 		log("Failed to read current file:", file_path)
