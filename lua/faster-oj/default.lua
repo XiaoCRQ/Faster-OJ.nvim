@@ -8,9 +8,11 @@
 ---@field server_mod '"only_http"'|'"only_ws"'|'"all"' 服务器启动模式
 ---@field work_dir string 工作目录
 ---@field json_dir string 题目数据存储目录
+---@field solve_dir string 已解决问题存储目录
 ---@field template_dir string 模板数据存储目录
 ---@field template_default string 默认模板
 ---@field template_default_ext string 默认模板无扩展名时使用的默认扩展名
+---@field open_new boolean 默认打开题目文件
 ---@field linux_mem_offset integer 系统内存偏移量
 ---@field macos_mem_offset integer 系统内存偏移量
 ---@field code_obfuscator table<string, fun(code:string):string> 代码混淆器
@@ -50,7 +52,7 @@ M.config = {
 	ws_host = "127.0.0.1",
 	ws_port = 10044,
 
-	max_time_out = 3,
+	max_time_out = 5,
 
 	debug = false, -- Debug mode
 	server_mod = "all", -- "only_http" | "only_ws" | "all"
@@ -60,9 +62,11 @@ M.config = {
 	------------------------------------------------------------------
 	work_dir = "", -- Work directory
 	json_dir = ".problem", -- Problem data directory
+	solve_dir = ".solve", -- Solve Problem data directory
 	template_dir = "", -- Template data directory
 	template_default = "",
 	template_default_ext = ".cpp",
+	open_new = true,
 
 	linux_mem_offset = -2900, -- kb
 	macos_mem_offset = -1500, -- kb

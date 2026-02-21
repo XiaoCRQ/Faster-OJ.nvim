@@ -78,16 +78,16 @@ function M.handle(json, cfg)
 		return
 	end
 
-	local ok_mkdir = os.execute('mkdir -p "' .. json_dir .. '"')
-	if ok_mkdir ~= 0 then
-		log("Failed to create directory:", json_dir)
-	end
+	os.execute('mkdir -p "' .. json_dir .. '"')
 
 	if not json.name then
 		log("Error: json.name is missing")
 		return
 	end
 
+	-- =============================
+	-- 保存题目 JSON
+	-- =============================
 	local filtered_json = filter_json(json, M.allowed_keys)
 	local file_path = json_dir .. "/" .. json.name .. ".json"
 
@@ -105,47 +105,60 @@ function M.handle(json, cfg)
 	f:write(json_str)
 	f:close()
 	log("Saved", file_path)
-	-- print("[FOJ] " .. json.name)
 
+	-- =============================
+	-- 创建代码文件（模板 / 空文件）
+	-- =============================
+	local ext = nil
+	local content = ""
+
+	-- 如果存在默认模板
 	if M.config.template_default and M.config.template_default ~= "" then
-		local template_content = ""
 		local template_file = M.config.template_default
 		local tf = io.open(template_file, "r")
+
 		if tf then
-			template_content = tf:read("*a")
+			content = tf:read("*a")
 			tf:close()
+			ext = template_file:match("^.+(%..+)$") or M.config.template_default_ext
 		else
 			log("Warning: template_default file not found:", template_file)
+		end
+	end
+
+	-- 没模板时使用默认扩展名
+	if ext == nil then
+		ext = M.config.template_default_ext
+	end
+
+	os.execute('mkdir -p "' .. M.config.work_dir .. '"')
+	local target_file = M.config.work_dir .. "/" .. json.name .. ext
+
+	local should_write = true
+	if vim.fn.filereadable(target_file) == 1 then
+		local choice = vim.fn.confirm('"' .. json.name .. '" already exists. Overwrite?', "&Yes\n&No", 2)
+		if choice ~= 1 then
+			log("Skipped writing file:", target_file)
+			should_write = false
+		end
+	end
+
+	if should_write then
+		local tf_out, err_out = io.open(target_file, "w")
+		if not tf_out then
+			log("Error opening target file:", target_file, err_out)
 			return
 		end
 
-		local ext = template_file:match("^.+(%..+)$") or M.config.template_default_ext
-		local target_file = M.config.work_dir .. "/" .. json.name .. ext
+		tf_out:write(content) -- 这里关键：无模板就是空字符串
+		tf_out:close()
 
-		os.execute('mkdir -p "' .. M.config.work_dir .. '"')
+		log("File written to", target_file)
+	end
 
-		local should_write = true
-		if vim.fn.filereadable(target_file) == 1 then
-			-- 弹出确认窗口，按钮顺序：Yes, No
-			local choice = vim.fn.confirm('"' .. json.name .. '" already exists. Overwrite?', "&Yes\n&No", 2)
-			if choice ~= 1 then
-				log("Skipped writing template for", target_file)
-				should_write = false
-			end
-		end
-
-		if should_write then
-			local tf_out, err_out = io.open(target_file, "w")
-			if not tf_out then
-				log("Error opening target file:", target_file, err_out)
-				return
-			end
-			tf_out:write(template_content)
-			tf_out:close()
-			log("Template written to", target_file)
-			vim.cmd("edit " .. vim.fn.fnameescape(target_file))
-			vim.api.nvim_win_set_cursor(0, { 1, 0 })
-		end
+	if M.config.open_new then
+		vim.cmd("edit " .. vim.fn.fnameescape(target_file))
+		vim.api.nvim_win_set_cursor(0, { 1, 0 })
 	end
 end
 

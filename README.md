@@ -1,176 +1,124 @@
 # Faster-OJ.nvim
 
 > ⚡ Accelerate your Competitive Programming workflow inside Neovim.
+> [README.en-US](https://github.com/XiaoCRQ/Faster-OJ.nvim/blob/main/README.md) | [README.zh-CN](https://github.com/XiaoCRQ/Faster-OJ.nvim/blob/main/README.zh-CN.md)
 
-**Faster-OJ.nvim** 是一款专为算法竞赛选手打造的 Neovim 插件。
-它负责本地判题、代码运行、以及与浏览器自动提交插件协作，构建完整的 **本地开发 → 自动提交 → 在线评测** 工作流。
-
-配合浏览器插件 **Faster-OJ** 使用，可实现真正的“写完即提交”。
+**Faster-OJ.nvim** is a powerful Neovim plugin designed for Competitive Programmers. It bridges the gap between local coding, testing, and online submission, providing a seamless "Code and Submit" experience.
 
 ---
 
-## ✨ 核心特性
+## ✨ Features
 
-* 🚀 **一键提交**
-  本地写代码 → 直接提交到 OJ
-
-* 🖥️ **本地判题服务器**
-  内置本地服务启动与管理功能
-
-  * `WebSocket` 实现采用 [mini-wsbroad](https://github.com/XiaoCRQ/mini-wsbroad)
-
-* 🧪 **快速测试**
-  编译、运行、查看输出一体化操作
-
-* 🔗 **无缝联动**
-  与浏览器插件协作完成自动提交
-
-* 🧠 **极简设计**
-  命令清晰，行为直观，专注竞赛效率
+* **🚀 One-Key Submit**: Submit code directly to Online Judges from Neovim without manual copy-pasting.
+* **🖥 Local Judge Server**: Built-in WebSocket management for handling judge tasks (powered by [mini-wsbroad](https://github.com/XiaoCRQ/mini-wsbroad)).
+* **🧪 Fast Local Testing**: Compile, execute, and verify your logic against sample cases with one command.
+* **🔗 Seamless Browser Integration**: Works hand-in-hand with browser extensions for data synchronization.
+* **🧠 Minimal & Efficient**: Simple commands and intuitive UI to keep you focused on the problem.
 
 ---
 
-## 🔄 推荐工作流
+## 🔄 Recommended Workflow
 
 ```text
-Competitive Companion
-        ↓
-Neovim (Faster-OJ.nvim)
-        ↓
-Local Judge Server
-        ↓
-Faster-OJ (Browser)
-        ↓
-Online Judge
+Competitive Companion (Browser)
+        ↓ Fetch Problem
+Neovim + Faster-OJ.nvim (Local)
+        ↓ Code & Test
+Local Judge Server (WebSocket)
+        ↓ Trigger Submit
+Faster-OJ (Browser Extension)
+        ↓ Execute
+Online Judge (Web)
+
 ```
 
-### 1️⃣ 接收题目
-
-通过浏览器插件 `competitive-companion` 接收题目数据。
-
-### 2️⃣ 本地开发
-
-在 Neovim 中编写代码。
-
-### 3️⃣ 本地测试
-
-运行本地判题机快速验证。
-
-### 4️⃣ 一键提交
-
-调用提交命令，自动发送至浏览器插件完成在线提交。
+1. **Receive Problem**: Use [Competitive Companion](https://github.com/jmerle/competitive-companion) to parse problem data into Neovim.
+2. **Develop Locally**: Write your solution in your customized Neovim environment.
+3. **Test Locally**: Run `:FOJ run` to verify against local samples.
+4. **Submit**: Call `:FOJ submit` to send your code to the [Faster-OJ](https://github.com/XiaoCRQ/Faster-OJ) browser extension for final submission.
 
 ---
 
-## 📦 前置插件
+## 📦 Installation & Configuration
 
-* 🌐 浏览器自动提交插件
-  **[Faster-OJ](https://github.com/XiaoCRQ/Faster-OJ)**
+### 1. Requirements
 
-* 📥 浏览器题目接收插件
-  **[competitive-companion](https://github.com/jmerle/competitive-companion)**
+* **Browser Extensions**: [Faster-OJ](https://github.com/XiaoCRQ/Faster-OJ) & [Competitive Companion](https://github.com/jmerle/competitive-companion).
+* **Neovim**: Latest stable version recommended.
 
----
+### 2. Plugin Installation (using lazy.nvim)
 
-## 📦 安装
-
-使用你喜欢的插件管理器，例如 `lazy.nvim`：
+#### **Minimal Installation (Default Settings)**
 
 ```lua
 {
   "xiaocrq/faster-oj.nvim",
   opts = {},
 }
+
+```
+
+#### **Standard Configuration Options**
+
+You can customize the behavior via the `opts` table:
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `warning_msg` | boolean | `true` | Whether to show compiler warnings in notifications |
+| `work_dir` | string | `""` | Root directory for the plugin workspace |
+| `json_dir` | string | `".problem"` | Directory to store problem data JSON files |
+| `solve_dir` | string | `".solve"` | Directory to move files when marked as solved |
+| `template_dir` | string | `""` | Directory where your code templates are located |
+| `template_default` | string | `""` | Filename of the default template to use |
+| `template_default_ext` | string | `".cpp"` | Default extension for new files if no template is set |
+| `compile_command` | table | (see below) | Compilation settings for different languages |
+| `run_command` | table | (see below) | Execution settings for different languages |
+
+**Example Command Config:**
+
+```lua
+opts = {
+  compile_command = {
+    cpp = {
+      exec = "g++",
+      args = { "-O2", "-Wall", "$(FABSPATH)", "-o", "Output" .. "/$(FNOEXT)" },
+    },
+  },
+  run_command = {
+    cpp = { exec = "Output" .. "/$(FNOEXT)" },
+  },
+}
+
 ```
 
 ---
 
-## ⚙️ 配置
+## 🛠 Commands
 
-默认配置文件：
-
-👉 [https://github.com/XiaoCRQ/Faster-OJ.nvim/blob/main/lua/faster-oj/default.lua](https://github.com/XiaoCRQ/Faster-OJ.nvim/blob/main/lua/faster-oj/default.lua)
-
-如无特殊需求，开箱即用。
-
----
-
-## 🛠️ 可用命令
-
-### 🔌 启动服务
-
-```vim
-:FOJ start
-```
-
-* 启动本地服务
-* 不带参数时使用默认启动参数
+| Command | Description |
+| --- | --- |
+| `:FOJ` | Full startup (starts both HTTP and WS services) |
+| `:FOJ start [all/http/ws]` | Start specific background services |
+| `:FOJ stop` | Stop all services |
+| `:FOJ submit` | Submit the current buffer to the Judge/Browser |
+| `:FOJ run` | Compile and run tests for the current problem |
+| `:FOJ solve [back]` | Mark problem as solved (moves the file) |
+| `:FOJ show / close` | Toggle the Judge result window |
 
 ---
 
-### 🔌 关闭服务
+## 📊 Platform Support
 
-```vim
-:FOJ stop
-```
+| Feature | Windows | Linux | macOS |
+| --- | --- | --- | --- |
+| Receive Problem | ✅ | ✅ | ✅ |
+| Local Testing | ✅ | ✅ | ✅ |
+| Submit | 🚧 | ✅ | 🚧 |
 
-* 关闭本地服务
-* 不带参数时使用默认关闭参数
-
----
-
-### 🚀 提交代码
-
-```vim
-:FOJ submit
-:FOJ sb
-```
-
-将当前文件提交到判题服务器。
+> *Note: Submission features rely on WebSocket services. Support for non-Linux platforms is currently experimental.*
 
 ---
 
-### ▶️ 本地运行
+## 📜 License
 
-```vim
-:FOJ run
-```
-
-编译并运行当前题目。
-
----
-
-### 🪟 控制运行窗口
-
-```vim
-:FOJ show
-:FOJ close
-```
-
-显示 / 关闭判题机运行窗口。
-
----
-
-## 📊 平台支持情况
-
-| 操作   | Windows | Linux | macOS |
-| ---- | ------- | ----- | ----- |
-| 接收题目 | ✅       | ✅     | ✅     |
-| 本地测试 | ✅       | ✅     | ✅     |
-| 提交题目 | 🚧      | ✅     | 🚧    |
-
-> 提交功能依赖 `WebSocket` 实现程序。
-
----
-
-## 🎯 适用人群
-
-* 使用 Neovim 进行算法竞赛开发的选手
-* 追求极致效率的 Competitive Programmer
-* 想打造完整自动化 OJ 工作流的用户
-
----
-
-## 📜 开源协议
-
-本项目采用 [GNU GPL v3](https://www.google.com/search?q=https://www.gnu.org/licenses/gpl-3.0) 协议。
+Distributed under the **GNU GPL v3** License.

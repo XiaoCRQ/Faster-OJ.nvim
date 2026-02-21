@@ -22,6 +22,9 @@ local http_server = require("faster-oj.server.http.server")
 local ws_server = require("faster-oj.server.websocket.server")
 
 ---@type table
+local solve = require("faster-oj.featrue.solve")
+
+---@type table
 local featrue = require("faster-oj.featrue.init")
 
 ---@type table
@@ -70,6 +73,7 @@ function M.setup(opts)
 	---@type FOJ.Config
 	M.config = vim.tbl_deep_extend("force", M.config or {}, opts or {})
 
+	solve.setup(M.config)
 	featrue.setup(M.config)
 	ws_server.setup(M.config)
 	http_server.setup(M.config)
@@ -80,17 +84,32 @@ function M.setup(opts)
 	-- 支持：
 	--   :FOJ start [mode]
 	--   :FOJ stop [mode]
-	--   :FOJ submit | sb
-	--   :FOJ test | run
+	--   :FOJ submit
+	--   :FOJ run
+	--   :FOJ solve back
+	--   :FOJ solve
 	--   :FOJ show
 	--   :FOJ close
+	--   :FOJ
 	-- ------------------------------------------------------------
 
 	vim.api.nvim_create_user_command("FOJ", function(params)
-		---@type string[]
-		local args = vim.split(params.args or "", "%s+")
+		---@type string
+		local raw = params.args or ""
 
-		local cmd = args[1] and args[1]:lower() or ""
+		-- 没有任何参数
+		if raw == "" then
+			if M.config and M.config.work_dir then
+				vim.fn.chdir(M.config.work_dir)
+			end
+			M.start()
+			return
+		end
+
+		---@type string[]
+		local args = vim.split(raw, "%s+", { trimempty = true })
+
+		local cmd = args[1] and args[1]:lower()
 		local sub_cmd = nil
 
 		if #args > 1 then
@@ -101,17 +120,25 @@ function M.setup(opts)
 			M.start(sub_cmd)
 		elseif cmd == "stop" then
 			M.stop(sub_cmd)
-		elseif cmd == "submit" or cmd == "sb" then
+		elseif cmd == "submit" then
 			featrue.submit({
 				wait_for_connection = ws_server.wait_for_connection,
 				send = ws_server.send,
 			})
-		elseif cmd == "test" or cmd == "run" then
+		elseif cmd == "run" then
 			featrue.run()
 		elseif cmd == "show" then
 			featrue.show()
 		elseif cmd == "close" then
 			featrue.close()
+		elseif cmd == "solve" then
+			if not sub_cmd then
+				solve.solve()
+			elseif sub_cmd == "back" then
+				solve.solve_back()
+			else
+				print("[FOJ] Unknown solve command:", sub_cmd)
+			end
 		else
 			print("[FOJ] Unknown command:", cmd)
 		end
