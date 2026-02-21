@@ -5,7 +5,7 @@
 ---@field ws_port integer WebSocket 服务器端口
 ---@field max_time_out integer 浏览器连接最大时间
 ---@field debug boolean 是否开启调试模式
----@field server_mod '"only_http"'|'"only_ws"'|'"all"' 服务器启动模式
+---@field server_mod '"http"'|'"ws"'|'"all"' 服务器启动模式
 ---@field work_dir string 工作目录
 ---@field json_dir string 题目数据存储目录
 ---@field solve_dir string 已解决问题存储目录
@@ -55,7 +55,7 @@ M.config = {
 	max_time_out = 5,
 
 	debug = false, -- Debug mode
-	server_mod = "all", -- "only_http" | "only_ws" | "all"
+	server_mod = "all", -- "http" | "ws" | "all"
 
 	------------------------------------------------------------------
 	-- 📂 Storage

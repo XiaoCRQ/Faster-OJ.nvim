@@ -33,8 +33,8 @@ local default_config = require("faster-oj.default")
 ---@class FOJ
 ---@field config FOJ.Config 当前生效的全局配置
 ---@field setup fun(opts?:FOJ.Config) 初始化插件
----@field start fun(mod?:"only_http"|"only_ws"|"all") 启动服务器
----@field stop fun(mod?:"only_http"|"only_ws"|"all") 停止服务器
+---@field start fun(mod?:"http"|"ws"|"all") 启动服务器
+---@field stop fun(mod?:"http"|"ws"|"all") 停止服务器
 local M = {}
 
 -- ----------------------------------------------------------------
@@ -153,16 +153,16 @@ end
 ---
 ---默认模式取自 `config.server_mod`
 ---
----@param mod? "only_http"|"only_ws"|"all"
+---@param mod? "http"|"ws"|"all"
 function M.start(mod)
 	mod = mod or M.config.server_mod
 
 	log("Starting server mode:", mod)
 
-	if mod == "only_http" then
+	if mod == "http" then
 		http_server.start()
 		log("The HTTP server has been turned ON")
-	elseif mod == "only_ws" then
+	elseif mod == "ws" then
 		ws_server.start()
 		log("The WS server has been turned ON")
 	elseif mod == "all" then
@@ -182,16 +182,16 @@ end
 ---
 ---默认模式取自 `config.server_mod`
 ---
----@param mod? "only_http"|"only_ws"|"all"
+---@param mod? "http"|"ws"|"all"
 function M.stop(mod)
 	mod = mod or M.config.server_mod
 
 	log("Stopping server mode:", mod)
 
-	if mod == "only_http" then
+	if mod == "http" then
 		http_server.stop()
 		log("The HTTP server has been turned OFF")
-	elseif mod == "only_ws" then
+	elseif mod == "ws" then
 		ws_server.stop()
 		log("The WS server has been turned OFF")
 	elseif mod == "all" then
