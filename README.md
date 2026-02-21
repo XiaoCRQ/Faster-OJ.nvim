@@ -146,6 +146,22 @@ opts = {
 | `:FOJ show / close` | Toggle the Judge result window |
 | `:FOJ manage` | Manage test cases |
 
+* Keymap settings
+
+```lua
+local map = vim.keymap.set
+local opts = { noremap = true, silent = true }
+
+map("n", "<leader>cda", ":FOJ <CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Start Practicing" }))
+map("n", "<leader>cdq", ":FOJ stop<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Stop Practicing" }))
+map("n", "<leader>cdr", ":FOJ submit<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Submit" }))
+map("n", "<leader>cdt", ":FOJ run<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Judge" }))
+map("n", "<leader>cdu", ":FOJ show<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Toggle UI" }))
+map("n", "<leader>cds", ":FOJ solve<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Mark as Solved" }))
+map("n", "<leader>cdS", ":FOJ solve back<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Unmark as Solved" }))
+map("n", "<leader>cde", ":FOJ manage<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Edit Test Cases" }))
+```
+
 ---
 
 ## 📊 Platform Support

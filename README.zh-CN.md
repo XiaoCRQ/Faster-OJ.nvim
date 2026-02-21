@@ -147,6 +147,22 @@ opts = {
 | `:FOJ show / close` | 打开或关闭判题结果窗口 |
 | `:FOJ manage` | 管理测试案例 |
 
+* 快捷键配置
+
+```lua
+local map = vim.keymap.set
+local opts = { noremap = true, silent = true }
+
+map("n", "<leader>cda", ":FOJ <CR>", vim.tbl_extend("force", opts, { desc = "FOJ：开始刷题" }))
+map("n", "<leader>cdq", ":FOJ stop<CR>", vim.tbl_extend("force", opts, { desc = "FOJ：停止刷题" }))
+map("n", "<leader>cdr", ":FOJ submit<CR>", vim.tbl_extend("force", opts, { desc = "FOJ：提交" }))
+map("n", "<leader>cdt", ":FOJ run<CR>", vim.tbl_extend("force", opts, { desc = "FOJ：判题" }))
+map("n", "<leader>cdu", ":FOJ show<CR>", vim.tbl_extend("force", opts, { desc = "FOJ：UI开关" }))
+map("n", "<leader>cds", ":FOJ solve<CR>", vim.tbl_extend("force", opts, { desc = "FOJ：问题已解决" }))
+map("n", "<leader>cdS", ":FOJ solve back<CR>", vim.tbl_extend("force", opts, { desc = "FOJ：撤销解决问题" }))
+map("n", "<leader>cde", ":FOJ manage<CR>", vim.tbl_extend("force", opts, { desc = "FOJ：编辑案例" }))
+```
+
 ---
 
 ## 📊 平台支持状态
