@@ -64,6 +64,7 @@ Online Judge (在线评测)
 
 | 选项 | 类型 | 默认值 | 描述 |
 | --- | --- | --- | --- |
+| `obscure` | boolean | `true` | 是否启用词法模式判题，`false` 为逐行模式 |
 | `warning_msg` | boolean | `true` | 是否在通知中显示编译器产生的警告信息 |
 | `work_dir` | string | `""` | 插件的工作根目录 |
 | `json_dir` | string | `".problem"` | 存放从浏览器接收到的题目 JSON 数据的目录 |
@@ -71,6 +72,9 @@ Online Judge (在线评测)
 | `template_dir` | string | `""` | 存放代码模板的目录 |
 | `template_default` | string | `""` | 默认使用的模板文件名 |
 | `template_default_ext` | string | `".cpp"` | 当未指定模板时，新建文件默认使用的后缀名 |
+| `tc_ui` | table | (见下方) | 判题UI设置 |
+| `tc_manage_ui` | table | (见下方) | 管理测试案例UI设置 |
+| `compile_command` | table | (见下方) | 不同语言的编译指令配置 |
 | `compile_command` | table | (见下方) | 不同语言的编译指令配置 |
 | `run_command` | table | (见下方) | 不同语言的运行指令配置 |
 
@@ -78,17 +82,54 @@ Online Judge (在线评测)
 
 ```lua
 opts = {
-  compile_command = {
-    cpp = {
-      exec = "g++",
-      args = { "-O2", "-Wall", "$(FABSPATH)", "-o", "Output" .. "/$(FNOEXT)" },
-    },
+ tc_ui = {
+  width = 0.9,
+  height = 0.9,
+  layout = {
+   { 4, "tc" },
+   { 5, { { 1, "si" }, { 1, "so" } } },
+   { 5, { { 1, "info" }, { 1, "eo" } } },
   },
-  run_command = {
-    cpp = { exec = "Output" .. "/$(FNOEXT)" },
+  mappings = {
+   close = { "<esc>", "<C-c>", "q", "Q" },
+   view = { "a", "i", "o", "O" },
+   view_focus_next = { "<down>", "<Tab>" },
+   view_focus_prev = { "<up>", "<S-Tab>" },
+   focus_next = { "j", "<down>", "<Tab>" },
+   focus_prev = { "k", "<up>", "<S-Tab>" },
   },
-}
+ },
 
+ tc_manage_ui = {
+  width = 0.9,
+  height = 0.9,
+  layout = {
+   { 3, "tc" },
+   { 5, "si" },
+   { 5, "so" },
+  },
+  mappings = {
+   close = { "<esc>", "<C-c>", "q", "Q" },
+   erase = { "d" },
+   write = { "w" },
+   add = { "a" },
+   edit = { "e", "i" ,"o", "O"},
+   edit_focus_next = { "<down>", "<Tab>" },
+   edit_focus_prev = { "<up>", "<S-Tab>" },
+   focus_next = { "j", "<down>", "<Tab>" },
+   focus_prev = { "k", "<up>", "<S-Tab>" },
+  },
+ },
+
+ compile_command = {
+   cpp = {
+     exec = "g++",
+     args = { "-O2", "-Wall", "$(FABSPATH)", "-o", "Output" .. "/$(FNOEXT)" },
+   },
+ },
+ run_command = {
+   cpp = { exec = "Output" .. "/$(FNOEXT)" },
+ },
 ```
 
 ---
@@ -104,6 +145,7 @@ opts = {
 | `:FOJ run` | 本地编译并运行当前题目的测试用例 |
 | `:FOJ solve [back]` | 将当前题目标记为已解决（移动文件） |
 | `:FOJ show / close` | 打开或关闭判题结果窗口 |
+| `:FOJ manage` | 管理测试案例 |
 
 ---
 

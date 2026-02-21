@@ -1,14 +1,4 @@
--- ================================================================
--- FOJ Utils Module
--- ================================================================
--- 负责：
---   1. 文件路径管理
---   2. 文件/JSON 读写
---   3. 语言检测
---   4. 占位符变量替换
--- ================================================================
-
----@module "faster-oj.featrue.utils"
+---@module "faster-oj.module.utils"
 
 ---@class FOJ.UtilsModule
 ---@field config FOJ.Config 当前生效配置
@@ -26,11 +16,6 @@
 ---@field expand fun(str:string, vars:table):string 字符串占位符替换
 local M = {}
 
--- ----------------------------------------------------------------
--- 📝 Debug Logger
--- ----------------------------------------------------------------
-
----Debug 日志输出（仅在 config.debug = true 时启用）
 ---@param ... any
 local function log(...)
 	if M.config.debug then
@@ -38,20 +23,11 @@ local function log(...)
 	end
 end
 
--- ----------------------------------------------------------------
--- ⚙️ Setup
--- ----------------------------------------------------------------
-
----初始化 Utils 模块
 ---@param cfg FOJ.Config 用户传入配置
 function M.setup(cfg)
 	---@type FOJ.Config
 	M.config = cfg or {}
 end
-
--- ----------------------------------------------------------------
--- 🌐 Language Detection
--- ----------------------------------------------------------------
 
 ---根据文件扩展名检测语言类型
 ---@param ext string 文件扩展名（例如 "cpp"）
@@ -80,10 +56,6 @@ function M.detect_language(ext)
 	return map[ext] or ext
 end
 
--- ----------------------------------------------------------------
--- 📂 File Path Utilities
--- ----------------------------------------------------------------
-
 ---获取当前缓冲区文件路径
 ---@return string file_path
 function M.get_file_path()
@@ -98,14 +70,13 @@ end
 ---@return string json_path
 function M.get_json_path()
 	local file_path = M.get_file_path()
+	if file_path == "" then
+		return ""
+	end
 	local filename = vim.fn.fnamemodify(file_path, ":t:r")
 	local json_path = M.config.json_dir .. "/" .. filename .. ".json"
 	return vim.fn.fnamemodify(json_path, ":p")
 end
-
--- ----------------------------------------------------------------
--- 📄 File Operations
--- ----------------------------------------------------------------
 
 ---判断文件是否存在
 ---@param path string 文件路径
@@ -142,10 +113,6 @@ function M.read_file_now()
 	end
 	return content
 end
-
--- ----------------------------------------------------------------
--- 📦 JSON Operations
--- ----------------------------------------------------------------
 
 ---读取 JSON 文件
 ---@param path string JSON 文件路径
@@ -189,10 +156,6 @@ end
 function M.get_json_file()
 	return M.read_json(M.get_json_path())
 end
-
--- ----------------------------------------------------------------
--- 🔧 Variable Utilities
--- ----------------------------------------------------------------
 
 ---获取当前文件占位符变量
 ---@param file_path string 文件路径

@@ -16,20 +16,34 @@
 ---@field linux_mem_offset integer 系统内存偏移量
 ---@field macos_mem_offset integer 系统内存偏移量
 ---@field code_obfuscator table<string, fun(code:string):string> 代码混淆器
----@field obscure boolean 是否启用模糊匹配
+---@field obscure boolean 是否启用模糊匹配 —— 词法模式 / 逐行模式
 ---@field warning_msg boolean 判题时是否输出警告信息
 ---@field max_workers integer 最大并发测题数量
----@field ui FOJ.UIConfig UI 布局配置
+---@field tc_ui FOJ.TCUIConfig UI 布局配置
+---@field tc_manage_ui FOJ.TCManageUIConfig UI 布局配置
 ---@field highlights FOJ.HighlightConfig 高亮颜色配置
 ---@field compile_command table<string, FOJ.Command> 编译命令表
 ---@field run_command table<string, FOJ.Command> 运行命令表
 
----@class FOJ.UIConfig
+---@class FOJ.TCUIConfig
 ---@field width number UI 宽度比例 (0~1)
 ---@field height number UI 高度比例 (0~1)
 ---@field layout table UI 布局结构
+---@field mappings table UI 快捷键
+
+---@class FOJ.TCManageUIConfig
+---@field width number UI 宽度比例 (0~1)
+---@field height number UI 高度比例 (0~1)
+---@field layout table UI 布局结构
+---@field mappings table UI 快捷键
 
 ---@class FOJ.HighlightConfig
+---@class FOJ.HighlightConfig.windows
+---@field Header string 标题颜色
+---@field Correct string 正确颜色
+---@field Warning string 警告颜色
+---@field Wrong string 错误颜色
+---@class FOJ.HighlightConfig.stdio
 ---@field Header string 标题颜色
 ---@field Correct string 正确颜色
 ---@field Warning string 警告颜色
@@ -44,9 +58,6 @@ local M = {}
 ---@type FOJ.Config
 M.config = {
 
-	------------------------------------------------------------------
-	-- 🌐 Server Configuration
-	------------------------------------------------------------------
 	http_host = "127.0.0.1",
 	http_port = 10043,
 	ws_host = "127.0.0.1",
@@ -57,9 +68,6 @@ M.config = {
 	debug = false, -- Debug mode
 	server_mod = "all", -- "http" | "ws" | "all"
 
-	------------------------------------------------------------------
-	-- 📂 Storage
-	------------------------------------------------------------------
 	work_dir = "", -- Work directory
 	json_dir = ".problem", -- Problem data directory
 	solve_dir = ".solve", -- Solve Problem data directory
@@ -77,22 +85,21 @@ M.config = {
 	warning_msg = false, -- Show warnings while judging
 	max_workers = 5, -- Max parallel judging workers
 
-	------------------------------------------------------------------
-	-- 🖥 UI Configuration
-	------------------------------------------------------------------
-	ui = {
+	tc_ui = {
 		width = 0.9,
 		height = 0.9,
-
-		-- Layout tree:
-		-- {
-		--   { ratio, "window_key" }
-		--   { ratio, { { ratio, "window_key" }, ... } }
-		-- }
 		layout = {
 			{ 4, "tc" },
 			{ 5, { { 1, "si" }, { 1, "so" } } },
 			{ 5, { { 1, "info" }, { 1, "eo" } } },
+		},
+		mappings = {
+			close = { "<esc>", "<C-c>", "q", "Q" },
+			view = { "a", "i", "o", "O" },
+			view_focus_next = { "<down>", "<Tab>" },
+			view_focus_prev = { "<up>", "<S-Tab>" },
+			focus_next = { "j", "<down>", "<Tab>" },
+			focus_prev = { "k", "<up>", "<S-Tab>" },
 		},
 		-- tc   = Testcases
 		-- si   = Standard Input
@@ -101,19 +108,42 @@ M.config = {
 		-- eo   = Expected Output
 	},
 
-	------------------------------------------------------------------
-	-- 🎨 Highlight Groups
-	------------------------------------------------------------------
-	highlights = {
-		Header = "#c0c0c0",
-		Correct = "#00ff00",
-		Warning = "orange",
-		Wrong = "red",
+	tc_manage_ui = {
+		width = 0.9,
+		height = 0.9,
+		layout = {
+			{ 3, "tc" },
+			{ 5, "si" },
+			{ 5, "so" },
+		},
+		mappings = {
+			close = { "<esc>", "<C-c>", "q", "Q" },
+			erase = { "d" },
+			write = { "w" },
+			add = { "a" },
+			edit = { "e", "i", "o", "O" },
+			edit_focus_next = { "<down>", "<Tab>" },
+			edit_focus_prev = { "<up>", "<S-Tab>" },
+			focus_next = { "j", "<down>", "<Tab>" },
+			focus_prev = { "k", "<up>", "<S-Tab>" },
+		},
 	},
 
-	------------------------------------------------------------------
-	-- 🛠 Compile Commands
-	------------------------------------------------------------------
+	highlights = {
+		windows = {
+			Header = "#c0c0c0",
+			Correct = "#00ff00",
+			Warning = "orange",
+			Wrong = "red",
+		},
+		stdio = {
+			Header = "#c0c0c0",
+			Correct = "#00ff00",
+			Warning = "orange",
+			Wrong = "orange",
+		},
+	},
+
 	compile_command = {
 
 		-- C
@@ -226,9 +256,6 @@ M.config = {
 		},
 	},
 
-	------------------------------------------------------------------
-	-- ▶ Run Commands
-	------------------------------------------------------------------
 	run_command = {
 
 		-- Native compiled

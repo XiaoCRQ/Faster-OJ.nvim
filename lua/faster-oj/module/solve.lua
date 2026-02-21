@@ -1,6 +1,6 @@
----@module "faster-oj.featrue.solve"
+---@module "faster-oj.module.solve"
 
-local utils = require("faster-oj.featrue.utils")
+local utils = require("faster-oj.module.utils")
 
 ---@class FOJ.SolveModule
 ---@field config FOJ.Config
@@ -8,19 +8,11 @@ local M = {}
 
 local uv = vim.uv or vim.loop
 
--- ----------------------------------------------------------------
--- 📝 Setup
--- ----------------------------------------------------------------
-
 ---@param cfg FOJ.Config 用户传入配置
 function M.setup(cfg)
 	---@type FOJ.Config
 	M.config = cfg or {}
 end
-
--- ----------------------------------------------------------------
--- 📝 Debug Logger
--- ----------------------------------------------------------------
 
 ---Debug 日志输出（仅在 config.debug = true 时启用）
 ---@param ... any
@@ -29,10 +21,6 @@ local function log(...)
 		print("[FOJ][solve]", ...)
 	end
 end
-
--- ----------------------------------------------------------------
--- 📝 Internal Helpers
--- ----------------------------------------------------------------
 
 ---@param path string
 ---@return boolean
@@ -62,14 +50,6 @@ local function write_lines(path, lines)
 	vim.fn.writefile(lines, path)
 end
 
--- ----------------------------------------------------------------
--- 🟢 Solve
--- ----------------------------------------------------------------
-
----将当前文件移动到 solve_dir
----并在 solve_dir/.history 追加一条记录：
----格式：
----    filename<TAB>original_absolute_path
 function M.solve()
 	local file_path = utils.get_file_path()
 
@@ -114,19 +94,6 @@ function M.solve()
 	log("Solved:", filename)
 end
 
--- ----------------------------------------------------------------
--- 🔄 Solve Back
--- ----------------------------------------------------------------
-
----从 solve_dir/.history 恢复最近一次 solve 的文件
----
----逻辑：
----1. 若 history 不存在 -> 直接返回
----2. 从最后一行开始读取
----3. 若该文件不存在 -> 删除该行
----4. 直到找到存在的文件 or history 为空
----5. 执行恢复操作
----6. 若 history 为空 -> 删除文件
 function M.solve_back()
 	if not M.config or not M.config.solve_dir then
 		log("solve_dir not configured.")

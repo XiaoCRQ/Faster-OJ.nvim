@@ -64,6 +64,7 @@ You can customize the behavior via the `opts` table:
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
+| `obscure` | boolean | `true` | Enable token-based judging ( `false` for line-by-line mode) |
 | `warning_msg` | boolean | `true` | Whether to show compiler warnings in notifications |
 | `work_dir` | string | `""` | Root directory for the plugin workspace |
 | `json_dir` | string | `".problem"` | Directory to store problem data JSON files |
@@ -71,6 +72,8 @@ You can customize the behavior via the `opts` table:
 | `template_dir` | string | `""` | Directory where your code templates are located |
 | `template_default` | string | `""` | Filename of the default template to use |
 | `template_default_ext` | string | `".cpp"` | Default extension for new files if no template is set |
+| tc_ui | table | (See below) | Judging UI Settings |
+| tc_manage_ui | table | (See below) | Test Case Management UI Settings |
 | `compile_command` | table | (see below) | Compilation settings for different languages |
 | `run_command` | table | (see below) | Execution settings for different languages |
 
@@ -78,17 +81,54 @@ You can customize the behavior via the `opts` table:
 
 ```lua
 opts = {
-  compile_command = {
-    cpp = {
-      exec = "g++",
-      args = { "-O2", "-Wall", "$(FABSPATH)", "-o", "Output" .. "/$(FNOEXT)" },
-    },
+ tc_ui = {
+  width = 0.9,
+  height = 0.9,
+  layout = {
+   { 4, "tc" },
+   { 5, { { 1, "si" }, { 1, "so" } } },
+   { 5, { { 1, "info" }, { 1, "eo" } } },
   },
-  run_command = {
-    cpp = { exec = "Output" .. "/$(FNOEXT)" },
+  mappings = {
+   close = { "<esc>", "<C-c>", "q", "Q" },
+   view = { "a", "i", "o", "O" },
+   view_focus_next = { "<down>", "<Tab>" },
+   view_focus_prev = { "<up>", "<S-Tab>" },
+   focus_next = { "j", "<down>", "<Tab>" },
+   focus_prev = { "k", "<up>", "<S-Tab>" },
   },
-}
+ },
 
+ tc_manage_ui = {
+  width = 0.9,
+  height = 0.9,
+  layout = {
+   { 3, "tc" },
+   { 5, "si" },
+   { 5, "so" },
+  },
+  mappings = {
+   close = { "<esc>", "<C-c>", "q", "Q" },
+   erase = { "d" },
+   write = { "w" },
+   add = { "a" },
+   edit = { "e", "i" ,"o", "O"},
+   edit_focus_next = { "<down>", "<Tab>" },
+   edit_focus_prev = { "<up>", "<S-Tab>" },
+   focus_next = { "j", "<down>", "<Tab>" },
+   focus_prev = { "k", "<up>", "<S-Tab>" },
+  },
+ },
+
+ compile_command = {
+   cpp = {
+     exec = "g++",
+     args = { "-O2", "-Wall", "$(FABSPATH)", "-o", "Output" .. "/$(FNOEXT)" },
+   },
+ },
+ run_command = {
+   cpp = { exec = "Output" .. "/$(FNOEXT)" },
+ },
 ```
 
 ---
@@ -104,6 +144,7 @@ opts = {
 | `:FOJ run` | Compile and run tests for the current problem |
 | `:FOJ solve [back]` | Mark problem as solved (moves the file) |
 | `:FOJ show / close` | Toggle the Judge result window |
+| `:FOJ manage` | Manage test cases |
 
 ---
 
