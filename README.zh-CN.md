@@ -66,7 +66,7 @@ Online Judge (在线评测)
 
 #### **标准化配置详解**
 
-你可以根据需求自定义以下选项：
+你可以根据需求自定义以下常用选项：[更多默认配置](https://github.com/XiaoCRQ/Faster-OJ.nvim/blob/main/lua/faster-oj/default.lua)
 
 | 选项 | 类型 | 默认值 | 描述 |
 | --- | --- | --- | --- |
@@ -80,7 +80,6 @@ Online Judge (在线评测)
 | `template_default_ext` | string | `".cpp"` | 当未指定模板时，新建文件默认使用的后缀名 |
 | `tc_ui` | table | (见下方) | 判题UI设置 |
 | `tc_manage_ui` | table | (见下方) | 管理测试案例UI设置 |
-| `compile_command` | table | (见下方) | 不同语言的编译指令配置 |
 | `compile_command` | table | (见下方) | 不同语言的编译指令配置 |
 | `run_command` | table | (见下方) | 不同语言的运行指令配置 |
 
