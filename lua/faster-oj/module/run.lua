@@ -172,6 +172,9 @@ function M.compile(file_path, on_compile_finish)
 		exec,
 		{ args = args, cwd = vars.DIR, stdio = { nil, nil, stderr }, hide = true },
 		function(code)
+			if code ~= 0 then
+				log("Compilation failed , compile_command is " .. exec .. vim.inspect(args))
+			end
 			safe_close(stderr)
 			safe_close(handle)
 
