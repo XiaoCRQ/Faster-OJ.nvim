@@ -17,6 +17,40 @@ local function get_inst(group)
 	return M.instances[group]
 end
 
+local function normalize_layout(raw_layout)
+	if type(raw_layout) ~= "table" then
+		return {}
+	end
+
+	-- 情况 A: 传入的是单节点 {weight, content} 而不是节点列表
+	-- 判断标准：第一个元素是数字，且第二个元素是字符串或表
+	if type(raw_layout[1]) == "number" and (type(raw_layout[2]) == "string" or type(raw_layout[2]) == "table") then
+		raw_layout = { raw_layout }
+	end
+
+	local normalized = {}
+	for _, item in ipairs(raw_layout) do
+		if type(item) == "table" then
+			local weight = item[1] or 1
+			local content
+
+			-- 情况 B: 平铺式嵌套 {weight, {w1, c1}, {w2, c2}, ...}
+			-- 如果第二个元素是表，且该表的第一项是数字，说明它是子节点而非节点列表
+			if type(item[2]) == "table" and type(item[2][1]) == "number" then
+				content = {}
+				for i = 2, #item do
+					table.insert(content, item[i])
+				end
+			else
+				-- 标准式嵌套 {weight, "key"} 或 {weight, {{w,c}, {w,c}}}
+				content = item[2]
+			end
+			table.insert(normalized, { weight, content })
+		end
+	end
+	return normalized
+end
+
 ---递归渲染布局
 ---@param group_name string 组名
 ---@param layout table 布局配置
@@ -25,29 +59,27 @@ end
 ---@param win_opts table 窗口配置
 local function render_recursive(group_name, layout, area, titles, win_opts)
 	local inst = get_inst(group_name)
+	local nodes = normalize_layout(layout)
 	local total_weight = 0
-	for _, node in ipairs(layout) do
-		total_weight = total_weight + (node[1] or 1)
+	for _, node in ipairs(nodes) do
+		total_weight = total_weight + node[1]
 	end
 
 	local current_pos = 0
-	for i, node in ipairs(layout) do
+	for i, node in ipairs(nodes) do
 		local weight, content = node[1], node[2]
-		local is_last = (i == #layout)
-
-		-- 计算当前节点大小
+		local is_last = (i == #nodes)
 		local size = is_last and (area.total_size - current_pos) or math.floor(area.total_size * weight / total_weight)
+		size = math.max(size, 1)
 
 		if type(content) == "string" then
 			local key = content
-			-- 缓冲区复用与校验
 			if not inst.bufs[key] or not vim.api.nvim_buf_is_valid(inst.bufs[key]) then
 				inst.bufs[key] = vim.api.nvim_create_buf(false, true)
 			end
 			local buf = inst.bufs[key]
-
 			local opt = win_opts[key] or {}
-			-- 计算实际宽高，考虑边框占用的 2 单元
+
 			local win_w = math.max((area.is_horizontal and size or area.width) - 2, 1)
 			local win_h = math.max((area.is_horizontal and area.height or size) - 2, 1)
 
@@ -65,8 +97,7 @@ local function render_recursive(group_name, layout, area, titles, win_opts)
 
 			vim.wo[win].number = opt.number or false
 			table.insert(inst.wins, win)
-		else
-			-- 容器节点：切换方向递归
+		elseif type(content) == "table" then
 			local sub_area = {
 				row = area.is_horizontal and area.row or (area.row + current_pos),
 				col = area.is_horizontal and (area.col + current_pos) or area.col,
