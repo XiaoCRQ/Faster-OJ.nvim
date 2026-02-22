@@ -66,7 +66,7 @@ Online Judge (Web)
 
 #### **Standard Configuration Options**
 
-You can customize the behavior via the `opts` table: [more default opts](https://github.com/XiaoCRQ/Faster-OJ.nvim/blob/main/lua/faster-oj/default.lua))
+You can customize the behavior via the `opts` table: [more default opts](https://github.com/XiaoCRQ/Faster-OJ.nvim/blob/main/lua/faster-oj/default.lua)
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
