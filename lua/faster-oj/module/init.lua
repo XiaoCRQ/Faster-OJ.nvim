@@ -86,6 +86,7 @@ function M.run()
 			end
 
 			runner.run(file_path, json, function(res)
+				log("Tests " .. res.test_index .. " over")
 				tests[res.test_index] = res
 				ui.update(#json.tests, tests)
 			end)
