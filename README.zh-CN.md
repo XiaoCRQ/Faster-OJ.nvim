@@ -5,7 +5,8 @@
 ![image](https://raw.githubusercontent.com/XiaoCRQ/faster-oj.nvim/main/img/test.png)
 ![image](https://raw.githubusercontent.com/XiaoCRQ/faster-oj.nvim/main/img/edit.png)
 <p>⚡ 极速提升 Neovim 中的算法竞赛 (Competitive Programming) 工作流。</p>
-<p> [README.en-US](https://github.com/XiaoCRQ/Faster-OJ.nvim/blob/main/README.md) | [README.zh-CN](https://github.com/XiaoCRQ/Faster-OJ.nvim/blob/main/README.zh-CN.md) </p>
+
+[README.en-US](https://github.com/XiaoCRQ/Faster-OJ.nvim/blob/main/README.md) | [README.zh-CN](https://github.com/XiaoCRQ/Faster-OJ.nvim/blob/main/README.zh-CN.md)
 </div>
 
 **Faster-OJ.nvim** 是一款专为算法竞赛选手打造的 Neovim 插件。它将本地代码编写、自动化判题与浏览器自动提交无缝集成，旨在实现“写完即提交”的极致体验。
