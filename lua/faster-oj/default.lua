@@ -15,7 +15,7 @@
 ---@field open_new boolean 默认打开题目文件
 ---@field linux_mem_offset integer 系统内存偏移量
 ---@field macos_mem_offset integer 系统内存偏移量
----@field code_obfuscator table<string, fun(code:string):string> 代码混淆器
+---@field code_obfuscator table 代码混淆器 —— 默认不启用
 ---@field obscure boolean 是否启用模糊匹配 —— 词法模式 / 逐行模式
 ---@field warning_msg boolean 判题时是否输出警告信息
 ---@field max_workers integer 最大并发测题数量
@@ -79,7 +79,13 @@ M.config = {
 	linux_mem_offset = -2900, -- kb
 	macos_mem_offset = -1500, -- kb
 
-	code_obfuscator = {}, -- Language -> obfuscator function
+	code_obfuscator = {
+		result = "",
+		cmd = {
+			exec = "",
+			args = nil,
+		},
+	},
 	obscure = true, -- Enable fuzzy matching
 
 	warning_msg = false, -- Show warnings while judging
