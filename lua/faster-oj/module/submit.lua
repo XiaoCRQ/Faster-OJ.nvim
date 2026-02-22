@@ -21,11 +21,11 @@ end
 ---@param ws table WebSocket 对象
 ---@param submit_data table 包含 language, code, url 的表
 local function finalize_submission(ws, submit_data)
-	local tmp_path = M.config.json_dir .. "/tmp.json"
+	local tmp_path = M.config.json_dir .. "/temp.json"
 
 	-- utils.write_json 内部应使用 vim.json.encode 以确保转义安全
 	if not utils.write_json(tmp_path, submit_data) then
-		log("Failed to write tmp.json")
+		log("Failed to write temp.json")
 		return
 	end
 
@@ -34,6 +34,15 @@ local function finalize_submission(ws, submit_data)
 	ws.wait_for_connection(M.config.max_time_out, function()
 		ws.send("broadcast " .. tmp_path)
 	end)
+end
+
+local function submit(submit_data, file_path, ws)
+	submit_data.code = utils.read_file(file_path)
+	if not submit_data.code then
+		log("Failed to read current file:", file_path)
+		return
+	end
+	finalize_submission(ws, submit_data)
 end
 
 ---@param ws table WebSocket 对象
@@ -68,6 +77,13 @@ function M.submit(ws)
 
 	if should_obscure then
 		local exec = utils.expand(cmd_cfg.cmd.exec, vars)
+
+		if vim.fn.executable(exec) ~= 1 then
+			log(string.format("Obfuscator exec '%s' not found or not executable. Falling back to normal submit.", exec))
+			submit(submit_data, file_path, ws)
+			return
+		end
+
 		local result_path = utils.expand(cmd_cfg.result, vars)
 		local args = {}
 		for _, a in ipairs(cmd_cfg.cmd.args or {}) do
@@ -89,6 +105,7 @@ function M.submit(ws)
 				stderr:close()
 				if code ~= 0 then
 					log(string.format("Obfuscation failed (Exit code: %d, Signal: %d)", code, signal))
+					submit(submit_data, file_path, ws)
 					return
 				end
 
@@ -97,6 +114,7 @@ function M.submit(ws)
 					submit_data.code = utils.read_file(result_path)
 					if not submit_data.code then
 						log("Failed to read obscured file:", result_path)
+						submit(submit_data, file_path, ws)
 						return
 					end
 					finalize_submission(ws, submit_data)
@@ -116,13 +134,7 @@ function M.submit(ws)
 			end
 		end)
 	else
-		-- 直接读取当前文件
-		submit_data.code = utils.read_file(file_path)
-		if not submit_data.code then
-			log("Failed to read current file:", file_path)
-			return
-		end
-		finalize_submission(ws, submit_data)
+		submit(submit_data, file_path, ws)
 	end
 end
 
