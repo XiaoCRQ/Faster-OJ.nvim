@@ -218,11 +218,28 @@ end
 
 function M.show()
 	vim.schedule(function()
-		if M.state.size == 0 then
+		if M.state.size == 0 or M.is_open() then
 			return
 		end
 		ui.open(GROUP, M.config.tc_ui, TITLES, WIN_OPTS, function()
-			local tc_buf = ui.instances[GROUP].bufs.tc
+			local inst = ui.instances[GROUP]
+			local tc_buf = inst.bufs.tc
+
+			-- 核心修复：处理命令行 :q 或手动关闭窗口的情况
+			for _, buf in pairs(inst.bufs) do
+				vim.api.nvim_create_autocmd("BufWinLeave", {
+					buffer = buf,
+					callback = function()
+						-- 使用 schedule 确保在窗口关闭流程中不会产生冲突
+						vim.schedule(function()
+							if M.is_open() then
+								M.close()
+							end
+						end)
+					end,
+				})
+			end
+
 			M.bind_keys()
 
 			vim.api.nvim_create_autocmd("CursorMoved", {

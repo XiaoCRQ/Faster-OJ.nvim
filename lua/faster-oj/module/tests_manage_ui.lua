@@ -114,6 +114,21 @@ local function setup_sync_logic()
 	end
 end
 
+---保存数据到文件
+function M.save()
+	if M.state.json and M.state.json_file_path ~= "" then
+		utils.write_json(M.state.json_file_path, M.state.json)
+		vim.notify("[FOJ] Saved to " .. vim.fn.fnamemodify(M.state.json_file_path, ":t"), vim.log.levels.INFO)
+		-- 保存后清除所有相关 buffer 的修改状态，防止退出时提示
+		local inst = ui.instances[GROUP]
+		if inst then
+			for _, buf in pairs(inst.bufs) do
+				vim.bo[buf].modified = false
+			end
+		end
+	end
+end
+
 ---绑定按键映射
 local function bind_keys()
 	local inst = ui.instances[GROUP]
@@ -124,15 +139,7 @@ local function bind_keys()
 
 		-- 全局写入映射 (w)
 		for _, k in ipairs(maps.write) do
-			vim.keymap.set("n", k, function()
-				if M.state.json then
-					utils.write_json(M.state.json_file_path, M.state.json)
-					vim.notify(
-						"[FOJ] Saved to " .. vim.fn.fnamemodify(M.state.json_file_path, ":t"),
-						vim.log.levels.INFO
-					)
-				end
-			end, opts)
+			vim.keymap.set("n", k, M.save, opts)
 		end
 
 		if key == "tc" then
@@ -258,7 +265,31 @@ function M.manage()
 		M.state.current_index = 1
 
 		ui.open(GROUP, M.config.tc_manage_ui, TITLES, WIN_OPTS, function()
-			local tc_buf = ui.instances[GROUP].bufs.tc
+			local inst = ui.instances[GROUP]
+			local tc_buf = inst.bufs.tc
+
+			-- === 核心修复：处理命令行指令 (:q 和 :w) ===
+			for _, buf in pairs(inst.bufs) do
+				-- 1. 处理 :q (只要有一个窗口离开，就关闭整组)
+				vim.api.nvim_create_autocmd("BufWinLeave", {
+					buffer = buf,
+					callback = function()
+						vim.schedule(function()
+							if M.is_open() then
+								M.close()
+							end
+						end)
+					end,
+				})
+
+				-- 2. 处理 :w (劫持写入指令) (暂定修改)
+				-- vim.api.nvim_create_autocmd("BufWriteCmd", {
+				-- 	buffer = buf,
+				-- 	callback = function()
+				-- 		M.save()
+				-- 	end,
+				-- })
+			end
 
 			update_tc_list()
 			update_details(1)
