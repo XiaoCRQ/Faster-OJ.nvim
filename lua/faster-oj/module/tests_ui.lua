@@ -126,6 +126,9 @@ function M.update(size, testcases)
 				-- 根据状态选择 TestUIWinCorrect 或 TestUIWinWrong
 				hl = (s_type == "AC") and "TestUIWinCorrect" or "TestUIWinWrong"
 			end
+			if s_type ~= "Running" then
+				s_type = " " .. s_type
+			end
 			table.insert(lines, string.format(TC_FORMAT, "TC " .. i, s_type, time, mem))
 			if hl then
 				-- 状态列着色
@@ -227,8 +230,8 @@ function M.show()
 				callback = function()
 					local cursor = vim.api.nvim_win_get_cursor(0)
 					local r = math.max(2, cursor[1])
-					if r ~= cursor[1] or cursor[2] ~= 2 then
-						vim.api.nvim_win_set_cursor(0, { r, 2 })
+					if r ~= cursor[1] or cursor[2] ~= 5 then
+						vim.api.nvim_win_set_cursor(0, { r, 5 })
 					end
 					M.state.current_idx = r - 1
 					update_details(M.state.current_idx)

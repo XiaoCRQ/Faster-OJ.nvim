@@ -271,8 +271,8 @@ function M.manage()
 				callback = function()
 					local cursor = vim.api.nvim_win_get_cursor(0)
 					local r = cursor[1] -- 管理界面无 Headline，从 1 开始
-					if cursor[2] ~= 2 then
-						vim.api.nvim_win_set_cursor(0, { r, 2 })
+					if cursor[2] ~= 5 then
+						vim.api.nvim_win_set_cursor(0, { r, 5 })
 					end
 					if r ~= M.state.current_index then
 						update_details(r)
