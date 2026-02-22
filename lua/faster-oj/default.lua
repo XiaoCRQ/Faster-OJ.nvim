@@ -20,7 +20,7 @@
 ---@field warning_msg boolean 判题时是否输出警告信息
 ---@field max_workers integer 最大并发测题数量
 ---@field tc_ui FOJ.TCUIConfig UI 布局配置
----@field tc_manage_ui FOJ.TCManageUIConfig UI 布局配置
+---@field tc_edit_ui FOJ.TCManageUIConfig UI 布局配置
 ---@field highlights FOJ.HighlightConfig 高亮颜色配置
 ---@field compile_command table<string, FOJ.Command> 编译命令表
 ---@field run_command table<string, FOJ.Command> 运行命令表
@@ -114,7 +114,7 @@ M.config = {
 		-- eo   = Expected Output
 	},
 
-	tc_manage_ui = {
+	tc_edit_ui = {
 		width = 0.9,
 		height = 0.9,
 		layout = {

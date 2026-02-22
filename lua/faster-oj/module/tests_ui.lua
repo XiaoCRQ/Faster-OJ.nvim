@@ -259,9 +259,12 @@ function M.show()
 	end)
 end
 
-function M.close()
+function M.close(cb)
 	vim.schedule(function()
 		ui.close(GROUP)
+		if cb then
+			cb()
+		end
 	end)
 end
 

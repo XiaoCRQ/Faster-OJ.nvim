@@ -79,7 +79,7 @@ Online Judge (在线评测)
 | `template_default` | string | `""` | 默认使用的模板文件名 |
 | `template_default_ext` | string | `".cpp"` | 当未指定模板时，新建文件默认使用的后缀名 |
 | `tc_ui` | table | (见下方) | 判题UI设置 |
-| `tc_manage_ui` | table | (见下方) | 管理测试案例UI设置 |
+| `tc_edit_ui` | table | (见下方) | 管理测试案例UI设置 |
 | `compile_command` | table | (见下方) | 不同语言的编译指令配置 |
 | `run_command` | table | (见下方) | 不同语言的运行指令配置 |
 
@@ -105,7 +105,7 @@ opts = {
   },
  },
 
- tc_manage_ui = {
+ tc_edit_ui = {
   width = 0.9,
   height = 0.9,
   layout = {
@@ -150,7 +150,7 @@ opts = {
 | `:FOJ run` | 本地编译并运行当前题目的测试用例 |
 | `:FOJ solve [back]` | 将当前题目标记为已解决（移动文件） |
 | `:FOJ show / close` | 打开或关闭判题结果窗口 |
-| `:FOJ manage` | 管理测试案例 |
+| `:FOJ edit` | 编辑测试案例 |
 
 * 快捷键配置
 
@@ -165,7 +165,7 @@ map("n", "<leader>cdt", ":FOJ run<CR>", vim.tbl_extend("force", opts, { desc = "
 map("n", "<leader>cdu", ":FOJ show<CR>", vim.tbl_extend("force", opts, { desc = "FOJ：UI开关" }))
 map("n", "<leader>cds", ":FOJ solve<CR>", vim.tbl_extend("force", opts, { desc = "FOJ：问题已解决" }))
 map("n", "<leader>cdS", ":FOJ solve back<CR>", vim.tbl_extend("force", opts, { desc = "FOJ：撤销解决问题" }))
-map("n", "<leader>cde", ":FOJ manage<CR>", vim.tbl_extend("force", opts, { desc = "FOJ：编辑案例" }))
+map("n", "<leader>cde", ":FOJ edit<CR>", vim.tbl_extend("force", opts, { desc = "FOJ：编辑案例" }))
 ```
 
 ---
@@ -177,7 +177,7 @@ map("n", "<leader>cde", ":FOJ manage<CR>", vim.tbl_extend("force", opts, { desc 
 | 接收题目 | ✅ | ✅ | ✅ |
 | 本地测试 | ✅ | ✅ | ✅ |
 | 代码混淆 | ✅ | ✅ | ✅ |
-| 案例管理 | ✅ | ✅ | ✅ |
+| 编辑案例 | ✅ | ✅ | ✅ |
 | 问题管理 | ✅ | ✅ | ✅ |
 | 自动提交 | 🚧 | ✅ | 🚧 |
 

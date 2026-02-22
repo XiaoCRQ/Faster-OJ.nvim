@@ -81,8 +81,8 @@ function M.setup(opts)
 			module.show()
 		elseif cmd == "close" then
 			module.close()
-		elseif cmd == "manage" then
-			module.manage()
+		elseif cmd == "edit" then
+			module.edit()
 		elseif cmd == "solve" then
 			if not sub_cmd then
 				solve.solve()

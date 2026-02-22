@@ -79,7 +79,7 @@ You can customize the behavior via the `opts` table: [more default opts](https:/
 | `template_default` | string | `""` | Filename of the default template to use |
 | `template_default_ext` | string | `".cpp"` | Default extension for new files if no template is set |
 | `tc_ui` | table | (See below) | Judging UI Settings |
-| `tc_manage_ui` | table | (See below) | Test Case Management UI Settings |
+| `tc_edit_ui` | table | (See below) | Test Case Edit UI Settings |
 | `compile_command` | table | (see below) | Compilation settings for different languages |
 | `run_command` | table | (see below) | Execution settings for different languages |
 
@@ -105,7 +105,7 @@ opts = {
   },
  },
 
- tc_manage_ui = {
+ tc_edit_ui = {
   width = 0.9,
   height = 0.9,
   layout = {
@@ -150,7 +150,7 @@ opts = {
 | `:FOJ run` | Compile and run tests for the current problem |
 | `:FOJ solve [back]` | Mark problem as solved (moves the file) |
 | `:FOJ show / close` | Toggle the Judge result window |
-| `:FOJ manage` | Manage test cases |
+| `:FOJ edit` | Edit test cases |
 
 * Keymap settings
 
@@ -165,7 +165,7 @@ map("n", "<leader>cdt", ":FOJ run<CR>", vim.tbl_extend("force", opts, { desc = "
 map("n", "<leader>cdu", ":FOJ show<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Toggle UI" }))
 map("n", "<leader>cds", ":FOJ solve<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Mark as Solved" }))
 map("n", "<leader>cdS", ":FOJ solve back<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Unmark as Solved" }))
-map("n", "<leader>cde", ":FOJ manage<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Edit Test Cases" }))
+map("n", "<leader>cde", ":FOJ edit<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Edit Test Cases" }))
 ```
 
 ---
@@ -177,7 +177,7 @@ map("n", "<leader>cde", ":FOJ manage<CR>", vim.tbl_extend("force", opts, { desc 
 | Receive Problems | ✅ | ✅ | ✅ |
 | Local Testing | ✅ | ✅ | ✅ |
 | Code Obfuscation | ✅ | ✅ | ✅ |
-| Case Management | ✅ | ✅ | ✅ |
+| Case edit | ✅ | ✅ | ✅ |
 | Issue Management | ✅ | ✅ | ✅ |
 | Auto Submission | 🚧 | ✅ | 🚧 |
 

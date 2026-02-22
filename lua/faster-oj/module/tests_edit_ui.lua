@@ -1,11 +1,11 @@
----@module "faster-oj.module.tests_manage_ui"
+---@module "faster-oj.module.tests_edit_ui"
 local utils = require("faster-oj.module.utils")
 local ui = require("faster-oj.module.ui")
 
 local M = {}
-local GROUP = "ManageUI"
+local GROUP = "EditUI"
 
-local TITLES = { tc = "Testcases (Manage)", si = "Input", so = "Output" }
+local TITLES = { tc = "Testcases (Edit)", si = "Input", so = "Output" }
 local WIN_OPTS = {
 	tc = { number = false, focus = true },
 	si = { number = true },
@@ -132,7 +132,7 @@ end
 ---绑定按键映射
 local function bind_keys()
 	local inst = ui.instances[GROUP]
-	local maps = M.config.tc_manage_ui.mappings
+	local maps = M.config.tc_edit_ui.mappings
 
 	for key, buf in pairs(inst.bufs) do
 		local opts = { buffer = buf, nowait = true, silent = true }
@@ -243,7 +243,7 @@ local function bind_keys()
 end
 
 ---异步打开管理界面
-function M.manage()
+function M.edit()
 	vim.schedule(function()
 		if ui.is_open(GROUP) then
 			return
@@ -264,7 +264,7 @@ function M.manage()
 		M.state.json_file_path = utils.get_json_path()
 		M.state.current_index = 1
 
-		ui.open(GROUP, M.config.tc_manage_ui, TITLES, WIN_OPTS, function()
+		ui.open(GROUP, M.config.tc_edit_ui, TITLES, WIN_OPTS, function()
 			local inst = ui.instances[GROUP]
 			local tc_buf = inst.bufs.tc
 
@@ -314,9 +314,12 @@ function M.manage()
 	end)
 end
 
-function M.close()
+function M.close(cb)
 	vim.schedule(function()
 		ui.close(GROUP)
+		if cb then
+			cb()
+		end
 	end)
 end
 
