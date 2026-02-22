@@ -1,7 +1,12 @@
 # Faster-OJ.nvim
 
-> ⚡ Accelerate your Competitive Programming workflow inside Neovim.
-> [README.en-US](https://github.com/XiaoCRQ/Faster-OJ.nvim/blob/main/README.md) | [README.zh-CN](https://github.com/XiaoCRQ/Faster-OJ.nvim/blob/main/README.zh-CN.md)
+<div align="center">
+
+![image](https://raw.githubusercontent.com/XiaoCRQ/faster-oj.nvim/main/img/test.png)
+![image](https://raw.githubusercontent.com/XiaoCRQ/faster-oj.nvim/main/img/edit.png)
+<p>⚡ Accelerate your Competitive Programming workflow inside Neovim.</p>
+<p> [README.en-US](https://github.com/XiaoCRQ/Faster-OJ.nvim/blob/main/README.md) | [README.zh-CN](https://github.com/XiaoCRQ/Faster-OJ.nvim/blob/main/README.zh-CN.md) </p>
+</div>
 
 **Faster-OJ.nvim** is a powerful Neovim plugin designed for Competitive Programmers. It bridges the gap between local coding, testing, and online submission, providing a seamless "Code and Submit" experience.
 
@@ -167,12 +172,15 @@ map("n", "<leader>cde", ":FOJ manage<CR>", vim.tbl_extend("force", opts, { desc 
 ## 📊 Platform Support
 
 | Feature | Windows | Linux | macOS |
-| --- | --- | --- | --- |
-| Receive Problem | ✅ | ✅ | ✅ |
+| :--- | :---: | :---: | :---: |
+| Receive Problems | ✅ | ✅ | ✅ |
 | Local Testing | ✅ | ✅ | ✅ |
-| Submit | 🚧 | ✅ | 🚧 |
+| Code Obfuscation | ✅ | ✅ | ✅ |
+| Case Management | ✅ | ✅ | ✅ |
+| Issue Management | ✅ | ✅ | ✅ |
+| Auto Submission | 🚧 | ✅ | 🚧 |
 
-> *Note: Submission features rely on WebSocket services. Support for non-Linux platforms is currently experimental.*
+> *Note: Auto Submission features rely on WebSocket services. Support for non-Linux platforms is currently experimental.*
 
 ---
 

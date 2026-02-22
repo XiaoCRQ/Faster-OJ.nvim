@@ -1,7 +1,12 @@
 # Faster-OJ.nvim
 
-> ⚡ 极速提升 Neovim 中的算法竞赛 (Competitive Programming) 工作流。
-> [README.en-US](https://github.com/XiaoCRQ/Faster-OJ.nvim/blob/main/README.md) | [README.zh-CN](https://github.com/XiaoCRQ/Faster-OJ.nvim/blob/main/README.zh-CN.md)
+<div align="center">
+
+![image](https://raw.githubusercontent.com/XiaoCRQ/faster-oj.nvim/main/img/test.png)
+![image](https://raw.githubusercontent.com/XiaoCRQ/faster-oj.nvim/main/img/edit.png)
+<p>⚡ 极速提升 Neovim 中的算法竞赛 (Competitive Programming) 工作流。</p>
+<p> [README.en-US](https://github.com/XiaoCRQ/Faster-OJ.nvim/blob/main/README.md) | [README.zh-CN](https://github.com/XiaoCRQ/Faster-OJ.nvim/blob/main/README.zh-CN.md) </p>
+</div>
 
 **Faster-OJ.nvim** 是一款专为算法竞赛选手打造的 Neovim 插件。它将本地代码编写、自动化判题与浏览器自动提交无缝集成，旨在实现“写完即提交”的极致体验。
 
@@ -171,9 +176,12 @@ map("n", "<leader>cde", ":FOJ manage<CR>", vim.tbl_extend("force", opts, { desc 
 | --- | --- | --- | --- |
 | 接收题目 | ✅ | ✅ | ✅ |
 | 本地测试 | ✅ | ✅ | ✅ |
+| 代码混淆 | ✅ | ✅ | ✅ |
+| 案例管理 | ✅ | ✅ | ✅ |
+| 问题管理 | ✅ | ✅ | ✅ |
 | 自动提交 | 🚧 | ✅ | 🚧 |
 
-> *注：提交功能深度依赖 WebSocket 服务，非 Linux 平台目前处于测试阶段。*
+> *注：自动提交功能深度依赖 WebSocket 服务，非 Linux 平台目前处于测试阶段。*
 
 ---
 
