@@ -211,13 +211,14 @@ local function run_single_task(cmd_raw, vars, input, std_out, tl, ml_mb, cb)
 			handle:kill(is_win and 15 or 9)
 		end
 	end
+	log("Runing command is " .. final_exec .. vim.inspect(final_args))
 
 	handle, _ = uv.spawn(
 		final_exec,
 		{ args = final_args, cwd = vars.DIR, stdio = { stdin, stdout, stderr }, hide = true },
 		function(code, signal)
 			if code ~= 0 then
-				log("Compilation failed , compile_command is " .. final_exec .. vim.inspect(final_args))
+				log("Runing failed")
 			end
 
 			safe_close(timer)
