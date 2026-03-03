@@ -120,7 +120,13 @@ end
 ---@param on_win_created function 回调
 function M.open(group, config, titles, win_opts, on_win_created)
 	local inst = get_inst(group)
-	inst.last_args = { config, titles, win_opts, on_win_created }
+	-- inst.last_args = { config, titles, win_opts, on_win_created }
+	inst.last_args = {
+		config = config,
+		titles = titles,
+		win_opts = win_opts,
+		on_created = on_win_created,
+	}
 
 	vim.schedule(function()
 		M.close(group)
@@ -208,19 +214,22 @@ function M.is_open(group)
 end
 
 ---设置重绘监听
+--- BUG 无法重绘窗口
 function M.setup_resize(group)
 	local inst = get_inst(group)
 	if inst.augroup then
 		return
 	end
 
+	local last_args = inst.last_args
 	inst.augroup = vim.api.nvim_create_augroup("FOJUIResize_" .. group, { clear = true })
 	vim.api.nvim_create_autocmd("VimResized", {
 		group = inst.augroup,
 		callback = function()
-			if M.is_open(group) and inst.last_args then
-				-- 重新调用 open 实现重绘
-				M.open(group, unpack(inst.last_args))
+			local inst_now = M.instances[group]
+			if inst_now and M.is_open(group) and inst_now.last_args then
+				local args = inst_now.last_args
+				M.open(group, args.config, args.titles, args.win_opts, args.on_created)
 			end
 		end,
 	})

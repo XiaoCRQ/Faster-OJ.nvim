@@ -149,12 +149,12 @@ local function parse_memory_and_err(raw_err)
 	return max_rss_kb, clean_err:match("^%s*(.-)%s*$") or ""
 end
 
-function M.compile(file_path, on_compile_finish)
+function M.compile(file_path, need_compile, on_compile_finish)
 	local ext = vim.fn.fnamemodify(file_path, ":e")
 	local cmd_raw = M.config.compile_command[ext]
 	last_compile_msg = nil
 
-	if not cmd_raw or not cmd_raw.exec or cmd_raw.exec == "" then
+	if not cmd_raw or not cmd_raw.exec or cmd_raw.exec == "" or need_compile == false then
 		return on_compile_finish(true, "", false)
 	end
 

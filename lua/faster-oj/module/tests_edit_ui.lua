@@ -67,7 +67,7 @@ local function update_tc_list()
 	end
 	local lines = {}
 	for i = 1, #M.state.json.tests do
-		table.insert(lines, "  TC " .. i)
+		table.insert(lines, "  TC " .. i - 1)
 	end
 	set_buf_content("tc", lines)
 end

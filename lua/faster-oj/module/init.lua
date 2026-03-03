@@ -49,7 +49,7 @@ function M.submit(send)
 	submit.submit(send)
 end
 
-function M.run()
+function M.run(need_compile)
 	edit.close(function()
 		---@type string
 		local file_path = utils.get_file_path()
@@ -71,7 +71,7 @@ function M.run()
 
 		log("Commencing code testing...")
 
-		runner.compile(file_path, function(success, msg, need)
+		runner.compile(file_path, need_compile, function(success, msg, need)
 			if not success then
 				print("[FOJ] Compilation Failed:\n" .. msg)
 				return

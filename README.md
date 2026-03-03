@@ -147,6 +147,7 @@ opts = {
 | `:FOJ start [all/http/ws]` | Start specific background services |
 | `:FOJ stop` | Stop all services |
 | `:FOJ submit` | Submit the current buffer to the Judge/Browser |
+| `:FOJ test` | run tests for the current problem |
 | `:FOJ run` | Compile and run tests for the current problem |
 | `:FOJ solve [back]` | Mark problem as solved (moves the file) |
 | `:FOJ show / close` | Toggle the Judge result window |
@@ -162,6 +163,7 @@ map("n", "<leader>cda", ":FOJ <CR>", vim.tbl_extend("force", opts, { desc = "FOJ
 map("n", "<leader>cdq", ":FOJ stop<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Stop Practicing" }))
 map("n", "<leader>cdr", ":FOJ submit<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Submit" }))
 map("n", "<leader>cdt", ":FOJ run<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Judge" }))
+map("n", "<leader>cdT", ":FOJ run<CR>", vim.tbl_extend("force", opts, { desc = "FOJ：Judge(no compile)" }))
 map("n", "<leader>cdu", ":FOJ show<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Toggle UI" }))
 map("n", "<leader>cds", ":FOJ solve<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Mark as Solved" }))
 map("n", "<leader>cdS", ":FOJ solve back<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Unmark as Solved" }))
@@ -182,9 +184,3 @@ map("n", "<leader>cde", ":FOJ edit<CR>", vim.tbl_extend("force", opts, { desc = 
 | Auto Submission | 🚧 | ✅ | 🚧 |
 
 > *Note: Auto Submission features rely on WebSocket services. Support for non-Linux platforms is currently experimental.*
-
----
-
-## 📜 License
-
-Distributed under the **GNU GPL v3** License.

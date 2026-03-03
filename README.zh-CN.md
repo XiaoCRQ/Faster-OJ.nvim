@@ -147,6 +147,7 @@ opts = {
 | `:FOJ start [all/http/ws]` | 启动指定的本地服务 |
 | `:FOJ stop` | 停止所有服务 |
 | `:FOJ submit` | 将当前代码提交到判题服务器/浏览器插件 |
+| `:FOJ test` | 运行当前题目的测试用例 |
 | `:FOJ run` | 本地编译并运行当前题目的测试用例 |
 | `:FOJ solve [back]` | 将当前题目标记为已解决（移动文件） |
 | `:FOJ show / close` | 打开或关闭判题结果窗口 |
@@ -162,6 +163,7 @@ map("n", "<leader>cda", ":FOJ <CR>", vim.tbl_extend("force", opts, { desc = "FOJ
 map("n", "<leader>cdq", ":FOJ stop<CR>", vim.tbl_extend("force", opts, { desc = "FOJ：停止刷题" }))
 map("n", "<leader>cdr", ":FOJ submit<CR>", vim.tbl_extend("force", opts, { desc = "FOJ：提交" }))
 map("n", "<leader>cdt", ":FOJ run<CR>", vim.tbl_extend("force", opts, { desc = "FOJ：判题" }))
+map("n", "<leader>cdT", ":FOJ run<CR>", vim.tbl_extend("force", opts, { desc = "FOJ：判题(不编译)" }))
 map("n", "<leader>cdu", ":FOJ show<CR>", vim.tbl_extend("force", opts, { desc = "FOJ：UI开关" }))
 map("n", "<leader>cds", ":FOJ solve<CR>", vim.tbl_extend("force", opts, { desc = "FOJ：问题已解决" }))
 map("n", "<leader>cdS", ":FOJ solve back<CR>", vim.tbl_extend("force", opts, { desc = "FOJ：撤销解决问题" }))
@@ -182,9 +184,3 @@ map("n", "<leader>cde", ":FOJ edit<CR>", vim.tbl_extend("force", opts, { desc = 
 | 自动提交 | 🚧 | ✅ | 🚧 |
 
 > *注：自动提交功能深度依赖 WebSocket 服务，非 Linux 平台目前处于测试阶段。*
-
----
-
-## 📜 许可证
-
-基于 **GNU GPL v3** 开源协议。
