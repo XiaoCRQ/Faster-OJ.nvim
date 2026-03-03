@@ -102,6 +102,9 @@ function M.setup(opts)
 			end
 			print("[FOJ] Unknown solve command:", sub)
 		end,
+		erase = function()
+			module.erase()
+		end,
 	}
 
 	vim.api.nvim_create_user_command("FOJ", function(params)

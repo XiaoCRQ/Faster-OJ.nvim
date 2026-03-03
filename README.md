@@ -152,6 +152,7 @@ opts = {
 | `:FOJ solve [back]` | Mark problem as solved (moves the file) |
 | `:FOJ show / close` | Toggle the Judge result window |
 | `:FOJ edit` | Edit test cases |
+| `:FOJ erase` | Erase Problem |
 
 * Keymap settings
 
@@ -168,6 +169,7 @@ map("n", "<leader>cdu", ":FOJ show<CR>", vim.tbl_extend("force", opts, { desc = 
 map("n", "<leader>cds", ":FOJ solve<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Mark as Solved" }))
 map("n", "<leader>cdS", ":FOJ solve back<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Unmark as Solved" }))
 map("n", "<leader>cde", ":FOJ edit<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Edit Test Cases" }))
+map("n", "<leader>cdd", ":FOJ erase<CR>", vim.tbl_extend("force", opts, { desc = "FOJ：Erase Problem" }))
 ```
 
 ---

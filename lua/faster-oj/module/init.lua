@@ -117,4 +117,18 @@ function M.edit()
 	edit.edit()
 end
 
+function M.erase()
+	local file_path = utils.get_file_path()
+	local file_name = vim.fn.fnamemodify(file_path, ":t:r")
+	local file_json_path = vim.fn.fnamemodify(M.config.json_dir .. "/" .. file_name .. ".json", ":p")
+	if file_path == "" or file_name == "" then
+		return
+	end
+	if vim.fn.confirm("Delete " .. file_name .. "?", "&Yes\n&No", 2) == 1 then
+		vim.cmd("bd!")
+		utils.erase(file_path)
+		utils.erase(file_json_path)
+	end
+end
+
 return M

@@ -21,18 +21,19 @@ end
 ---@param ws table WebSocket 对象
 ---@param submit_data table 包含 language, code, url 的表
 local function finalize_submission(ws, submit_data)
-	local tmp_path = M.config.json_dir .. "/temp.json"
+	local temp_path = M.config.json_dir .. "/temp.json"
 
 	-- utils.write_json 内部应使用 vim.json.encode 以确保转义安全
-	if not utils.write_json(tmp_path, submit_data) then
+	if not utils.write_json(temp_path, submit_data) then
 		log("Failed to write temp.json")
 		return
 	end
 
-	log("Submit JSON generated:", tmp_path)
+	log("Submit JSON generated:", temp_path)
 
 	ws.wait_for_connection(M.config.max_time_out, function()
-		ws.send("broadcast " .. tmp_path)
+		ws.send("broadcast " .. temp_path)
+		-- utils.erase(temp_path)
 	end)
 end
 

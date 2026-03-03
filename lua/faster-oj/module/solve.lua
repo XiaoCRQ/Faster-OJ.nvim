@@ -22,11 +22,11 @@ local function log(...)
 	end
 end
 
----@param path string
----@return boolean
-local function file_exists(path)
-	return uv.fs_stat(path) ~= nil
-end
+-- ---@param path string
+-- ---@return boolean
+-- local function file_exists(path)
+-- 	return uv.fs_stat(path) ~= nil
+-- end
 
 ---@param path string
 local function ensure_dir(path)
@@ -122,7 +122,7 @@ function M.solve_back()
 		else
 			local current_path = solve_dir .. "/" .. filename
 
-			if not file_exists(current_path) then
+			if not utils.file_exists(current_path) then
 				-- 文件不存在，删除该记录
 				table.remove(lines)
 			else

@@ -152,6 +152,7 @@ opts = {
 | `:FOJ solve [back]` | 将当前题目标记为已解决（移动文件） |
 | `:FOJ show / close` | 打开或关闭判题结果窗口 |
 | `:FOJ edit` | 编辑测试案例 |
+| `:FOJ erase` | 删除当前问题数据 |
 
 * 快捷键配置
 
@@ -168,6 +169,7 @@ map("n", "<leader>cdu", ":FOJ show<CR>", vim.tbl_extend("force", opts, { desc = 
 map("n", "<leader>cds", ":FOJ solve<CR>", vim.tbl_extend("force", opts, { desc = "FOJ：问题已解决" }))
 map("n", "<leader>cdS", ":FOJ solve back<CR>", vim.tbl_extend("force", opts, { desc = "FOJ：撤销解决问题" }))
 map("n", "<leader>cde", ":FOJ edit<CR>", vim.tbl_extend("force", opts, { desc = "FOJ：编辑案例" }))
+map("n", "<leader>cdd", ":FOJ erase<CR>", vim.tbl_extend("force", opts, { desc = "FOJ：删除问题数据" }))
 ```
 
 ---
