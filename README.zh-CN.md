@@ -4,157 +4,302 @@
 
 ![image](https://raw.githubusercontent.com/XiaoCRQ/faster-oj.nvim/main/img/test.png)
 ![image](https://raw.githubusercontent.com/XiaoCRQ/faster-oj.nvim/main/img/edit.png)
-<p>⚡ 极速提升 Neovim 中的算法竞赛 (Competitive Programming) 工作流。</p>
+
+<p>⚡ 在 Neovim 中构建完整的算法竞赛自动化工作流。</p>
 
 [README.en-US](https://github.com/XiaoCRQ/Faster-OJ.nvim/blob/main/README.md) | [README.zh-CN](https://github.com/XiaoCRQ/Faster-OJ.nvim/blob/main/README.zh-CN.md)
+
 </div>
 
-**Faster-OJ.nvim** 是一款专为算法竞赛选手打造的 Neovim 插件。它将本地代码编写、自动化判题与浏览器自动提交无缝集成，旨在实现“写完即提交”的极致体验。
+---
+
+**Faster-OJ.nvim** 是一款面向算法竞赛（Competitive Programming）的 Neovim 插件。
+
+它将：
+
+* 📥 题目抓取
+* 🧪 本地判题
+* 🌐 浏览器自动提交
+* 🖥 WebSocket 本地服务
+* 🧩 多语言编译运行
+
+整合为一个完整闭环，实现真正的：
+
+> ✨ 写完 → 本地验证 → 一键提交 → 等待 AC
 
 ---
 
-## ✨ 特性
+# ✨ 核心特性
 
-* **🚀 一键提交**：直接从 Neovim 发送代码至浏览器并完成 OJ 提交，彻底告别复制粘贴。
-* **🖥 本地判题服务**：内置基于 WebSocket 的本地判题管理系统（配合 [mini-wsbroad](https://github.com/XiaoCRQ/mini-wsbroad)）。
-* **🧪 高效本地测试**：一键编译、运行并比对样例输出。
-* **🔗 浏览器深度集成**：配合浏览器插件实现题目数据同步与自动提交。
-* **🧠 极简高效**：命令直观，不干扰编程思路，专注解题。
+## 🚀 一键自动提交
+
+直接从 Neovim 将代码发送至浏览器插件完成 OJ 提交，彻底告别复制粘贴。
+
+配合浏览器插件：
+
+* Faster-OJ
+* Competitive Companion
 
 ---
 
-## 🔄 推荐工作流
+## 🖥 内置本地判题服务（HTTP + WebSocket）
 
-```text
-Competitive Companion (浏览器)
-        ↓ 抓取题目
-Neovim + Faster-OJ.nvim (本地)
-        ↓ 编写与本地测试
-Local Judge Server (WebSocket)
-        ↓ 触发提交
-Faster-OJ (浏览器插件)
-        ↓ 自动执行
-Online Judge (在线评测)
+插件自带：
+
+* HTTP 服务
+* WebSocket 服务
+* 浏览器自动连接
+* 可单独启动或组合启动（`http` / `ws` / `all`）
+
+默认端口：
 
 ```
+HTTP: 127.0.0.1:10043
+WS:   127.0.0.1:10044
+```
 
-1. **接收题目**：通过 [Competitive Companion](https://github.com/jmerle/competitive-companion) 自动将题目数据导入 Neovim。
-2. **本地开发**：在熟悉的 Neovim 环境中编写代码。
-3. **本地测试**：运行 `:FOJ run` 快速验证所有本地样例。
-4. **自动提交**：执行 `:FOJ submit`，代码将自动通过 [Faster-OJ](https://github.com/XiaoCRQ/Faster-OJ) 浏览器插件提交。
+支持浏览器连接超时控制、调试模式、并发控制。
 
 ---
 
-## 📦 安装与配置
+## 🧪 高性能本地测试系统
 
-### 1. 环境依赖
+* 支持多语言自动编译运行
+* 支持最大并发测题 (`max_workers`)
+* 支持逐行匹配 / 词法模糊匹配
+* 可选显示编译 warning
+* UI 实时更新测试状态
+* 支持重新打开历史结果（带缓存）
 
-* **浏览器插件**: [Faster-OJ](https://github.com/XiaoCRQ/Faster-OJ) & [Competitive Companion](https://github.com/jmerle/competitive-companion)。
-* **Neovim**: 建议使用最新稳定版。
+---
 
-### 2. 插件安装 (以 lazy.nvim 为例)
+## 🧩 多语言支持
 
-#### **最小化安装（默认配置）**
+内置编译与运行配置：
+
+### 编译型语言
+
+* C
+* C++
+* C#
+* Rust
+* Go
+* Java
+* Kotlin
+* Pascal
+* Swift
+* Zig
+
+### 脚本语言
+
+* Python
+* JavaScript (Node)
+* TypeScript (ts-node)
+* Lua
+
+### 语言配置
+
+示例配置
+
+```lua
+compile_command = { -- 脚本语言默认为空
+  cpp = {
+    exec = "g++",
+    args = {
+    "-O2",
+    "-Wall",
+    "$(FABSPATH)",
+    "-o",
+    "$(DIR)/$(FNOEXT)",
+    },
+  },
+}
+run_command = {
+  cpp = { exec = "$(DIR)/$(FNOEXT)" },
+}
+```
+
+---
+
+## 🧠 内置代码混淆支持（可选）
+
+支持自定义 `code_obfuscator`。
+
+⚠ 注意：
+
+* 仅当混淆器可运行且成功读取结果时自动替换代码
+* 不保证所有 OJ 平台允许该行为
+* 默认关闭
+
+---
+
+## 🪟 双 UI 系统
+
+### 判题 UI (`tc_ui`)
+
+支持：
+
+* 多窗口布局
+* 可视化测试结果
+* 标准输入输出对比
+* 预期输出对比
+* 错误信息展示
+* 自定义快捷键
+* 自定义高亮颜色
+
+### 测试用例管理 UI (`tc_edit_ui`)
+
+支持：
+
+* 添加测试
+* 编辑测试
+* 删除测试
+* 实时保存
+* 多窗口布局
+
+---
+
+# 🔄 推荐工作流
+
+```text
+Competitive Companion (Browser)
+        ↓
+Neovim + Faster-OJ.nvim
+        ↓
+Local Judge (HTTP + WS)
+        ↓
+Browser Extension (Faster-OJ)
+        ↓
+Online Judge
+```
+
+流程说明：
+
+1. 浏览器通过 Competitive Companion 抓题
+2. 自动传入 Neovim
+3. 本地开发 + `:FOJ run`
+4. 一键 `:FOJ submit`
+5. 浏览器自动完成提交
+
+---
+
+# 📦 安装
+
+## 环境依赖
+
+* Neovim (推荐最新稳定版)
+* 浏览器插件：
+
+  * Faster-OJ
+  * Competitive Companion
+
+---
+
+## 使用 lazy.nvim 安装
 
 ```lua
 {
   "xiaocrq/faster-oj.nvim",
   opts = {},
 }
-
-```
-
-#### **标准化配置详解**
-
-你可以根据需求自定义以下常用选项：[更多默认配置](https://github.com/XiaoCRQ/Faster-OJ.nvim/blob/main/lua/faster-oj/default.lua)
-
-| 选项 | 类型 | 默认值 | 描述 |
-| --- | --- | --- | --- |
-| `obscure` | boolean | `true` | 是否启用词法模式判题，`false` 为逐行模式 |
-| `warning_msg` | boolean | `true` | 是否在通知中显示编译器产生的警告信息 |
-| `work_dir` | string | `""` | 插件的工作根目录 |
-| `json_dir` | string | `".problem"` | 存放从浏览器接收到的题目 JSON 数据的目录 |
-| `solve_dir` | string | `".solve"` | 存放已解决（Mark as solved）题目的目录 |
-| `template_dir` | string | `""` | 存放代码模板的目录 |
-| `template_default` | string | `""` | 默认使用的模板文件名 |
-| `template_default_ext` | string | `".cpp"` | 当未指定模板时，新建文件默认使用的后缀名 |
-| `tc_ui` | table | (见下方) | 判题UI设置 |
-| `tc_edit_ui` | table | (见下方) | 管理测试案例UI设置 |
-| `compile_command` | table | (见下方) | 不同语言的编译指令配置 |
-| `run_command` | table | (见下方) | 不同语言的运行指令配置 |
-
-**编译与运行配置示例：**
-
-```lua
-opts = {
- tc_ui = {
-  width = 0.9,
-  height = 0.9,
-  layout = {
-   { 4, "tc" },
-   { 5, { { 1, "si" }, { 1, "so" } } },
-   { 5, { { 1, "info" }, { 1, "eo" } } },
-  },
-  mappings = {
-   close = { "<esc>", "<C-c>", "q", "Q" },
-   view = { "a", "i", "o", "O" },
-   view_focus_next = { "<down>", "<Tab>" },
-   view_focus_prev = { "<up>", "<S-Tab>" },
-   focus_next = { "j", "<down>", "<Tab>" },
-   focus_prev = { "k", "<up>", "<S-Tab>" },
-  },
- },
-
- tc_edit_ui = {
-  width = 0.9,
-  height = 0.9,
-  layout = {
-   { 3, "tc" },
-   { 5, "si" },
-   { 5, "so" },
-  },
-  mappings = {
-   close = { "<esc>", "<C-c>", "q", "Q" },
-   erase = { "d" },
-   write = { "w" },
-   add = { "a" },
-   edit = { "e", "i" ,"o", "O"},
-   edit_focus_next = { "<down>", "<Tab>" },
-   edit_focus_prev = { "<up>", "<S-Tab>" },
-   focus_next = { "j", "<down>", "<Tab>" },
-   focus_prev = { "k", "<up>", "<S-Tab>" },
-  },
- },
-
- compile_command = {
-   cpp = {
-     exec = "g++",
-     args = { "-O2", "-Wall", "$(FABSPATH)", "-o", "Output" .. "/$(FNOEXT)" },
-   },
- },
- run_command = {
-   cpp = { exec = "Output" .. "/$(FNOEXT)" },
- },
 ```
 
 ---
 
-## 🛠 常用命令
+# ⚙️ 配置说明
 
-| 命令 | 描述 |
-| --- | --- |
-| `:FOJ` | 启动完整服务（HTTP + WebSocket） |
-| `:FOJ start [all/http/ws]` | 启动指定的本地服务 |
-| `:FOJ stop` | 停止所有服务 |
-| `:FOJ submit` | 将当前代码提交到判题服务器/浏览器插件 |
-| `:FOJ test` | 运行当前题目的测试用例 |
-| `:FOJ run` | 本地编译并运行当前题目的测试用例 |
-| `:FOJ solve [back]` | 将当前题目标记为已解决（移动文件） |
-| `:FOJ show / close` | 打开或关闭判题结果窗口 |
-| `:FOJ edit` | 编辑测试案例 |
-| `:FOJ erase` | 删除当前问题数据 |
+完整默认配置位于：
 
-* 快捷键配置
+```
+lua/faster-oj/default.lua
+```
+
+---
+
+## 服务器相关
+
+| 选项             | 默认值           | 说明                         |
+| -------------- | ------------- | -------------------------- |
+| `http_host`    | `"127.0.0.1"` | HTTP 服务地址                  |
+| `http_port`    | `10043`       | HTTP 端口                    |
+| `ws_host`      | `"127.0.0.1"` | WebSocket 地址               |
+| `ws_port`      | `10044`       | WebSocket 端口               |
+| `server_mod`   | `"all"`       | 启动模式：`http` / `ws` / `all` |
+| `max_time_out` | `5`           | 浏览器连接超时时间                  |
+| `debug`        | `false`       | Debug 模式                   |
+
+---
+
+## 工作目录相关
+
+| 选项                     | 默认值        | 说明       |
+| ---------------------- | ---------- | -------- |
+| `work_dir`             | `""`       | 工作目录     |
+| `json_dir`             | `.problem` | 题目数据目录   |
+| `solve_dir`            | `.solve`   | 已解决目录    |
+| `template_dir`         | `""`       | 模板目录     |
+| `template_default`     | `""`       | 默认模板     |
+| `template_default_ext` | `.cpp`     | 默认扩展名    |
+| `open_new`             | `true`     | 是否自动打开新题 |
+
+---
+
+## 判题相关
+
+| 选项                 | 默认值     | 说明         |
+| ------------------ | ------- | ---------- |
+| `obscure`          | `true`  | 词法模式判题     |
+| `warning_msg`      | `false` | 显示 warning |
+| `max_workers`      | `5`     | 最大并发数      |
+| `linux_mem_offset` | -2900   | Linux 内存偏移 |
+| `macos_mem_offset` | -1500   | macOS 内存偏移 |
+
+---
+
+## UI 自定义
+
+支持：
+
+* 自定义窗口比例
+* 自定义布局树结构
+* 自定义快捷键
+* 自定义高亮颜色
+
+高亮示例：
+
+```lua
+highlights = {
+  windows = {
+    Header = "#c0c0c0",
+    Correct = "#00ff00",
+    Warning = "orange",
+    Wrong = "red",
+  },
+}
+```
+
+---
+
+# 🛠 常用命令
+
+| 命令                         | 说明      |
+| -------------------------- | ------- |
+| `:FOJ`                     | 启动完整服务  |
+| `:FOJ start [all/http/ws]` | 启动指定服务  |
+| `:FOJ stop`                | 停止服务    |
+| `:FOJ run`                 | 编译并运行测试 |
+| `:FOJ test`                | 仅测试     |
+| `:FOJ submit`              | 自动提交    |
+| `:FOJ show`                | 打开判题 UI |
+| `:FOJ close`               | 关闭 UI   |
+| `:FOJ edit`                | 编辑测试    |
+| `:FOJ erase`               | 删除问题数据  |
+| `:FOJ solve`               | 标记已解决   |
+| `:FOJ solve back`          | 撤销已解决   |
+
+---
+
+# ⌨ 推荐快捷键
 
 ```lua
 local map = vim.keymap.set
@@ -174,15 +319,34 @@ map("n", "<leader>cdd", ":FOJ erase<CR>", vim.tbl_extend("force", opts, { desc =
 
 ---
 
-## 📊 平台支持状态
+# 📊 平台支持
 
-| 功能 | Windows | Linux | macOS |
-| --- | --- | --- | --- |
-| 接收题目 | ✅ | ✅ | ✅ |
-| 本地测试 | ✅ | ✅ | ✅ |
-| 代码混淆 | ✅ | ✅ | ✅ |
-| 编辑案例 | ✅ | ✅ | ✅ |
-| 问题管理 | ✅ | ✅ | ✅ |
-| 自动提交 | 🚧 | ✅ | 🚧 |
+| 功能    | Windows | Linux | macOS |
+| ----- | ------- | ----- | ----- |
+| 接收题目  | ✅       | ✅     | ✅     |
+| 本地测试  | ✅       | ✅     | ✅     |
+| 编辑案例  | ✅       | ✅     | ✅     |
+| 问题管理  | ✅       | ✅     | ✅     |
+| 自动提交  | ✅       | ✅     | ✅     |
+| 多语言支持 | ✅       | ✅     | ✅     |
 
-> *注：自动提交功能深度依赖 WebSocket 服务，非 Linux 平台目前处于测试阶段。*
+---
+
+# 🎯 设计目标
+
+* 极致自动化
+* 零复制粘贴
+* 最小思维打断
+* 强扩展性
+* 高并发本地测试
+* 面向竞赛环境优化
+
+---
+
+如果你追求：
+
+* 🚀 极限刷题效率
+* 🧠 Neovim 原生体验
+* 🔥 真正的一键 AC 工作流
+
+那么 **Faster-OJ.nvim** 将成为你的主力竞赛工具。

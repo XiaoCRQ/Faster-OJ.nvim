@@ -2,6 +2,8 @@
 
 local uv = vim.uv or vim.loop
 local M = {}
+local is_win = vim.fn.has("win32") == 1
+local is_mac = vim.fn.has("mac") == 1
 
 --- 可选回调函数，收到 stdout 输出时触发
 ---@type fun(data:string)?
@@ -30,8 +32,14 @@ local function get_bin_path()
 	-- 获取当前脚本所在目录
 	local script_path = debug.getinfo(1).source:sub(2)
 	local bin_dir = vim.fn.fnamemodify(script_path, ":p:h")
-	local is_windows = vim.fn.has("win32") == 1
-	local bin_name = is_windows and "mini-wsbroad.exe" or "mini-wsbroad"
+	local bin_name
+	if is_mac then
+		bin_name = "mini-wsbroad-macos"
+	elseif is_win then
+		bin_name = "mini-wsbroad-windows.exe"
+	else
+		bin_name = "mini-wsbroad-linux"
+	end
 	return bin_dir .. "/" .. bin_name
 end
 

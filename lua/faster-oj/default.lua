@@ -15,7 +15,7 @@
 ---@field open_new boolean 默认打开题目文件
 ---@field linux_mem_offset integer 系统内存偏移量
 ---@field macos_mem_offset integer 系统内存偏移量
----@field code_obfuscator table 代码混淆器 —— 仅当混淆器可运行且读取到混淆结果时自动混淆 [慎用 - 不保证oj平台运行该行为]
+---@field code_obfuscator table 代码混淆器 —— 仅当混淆器可运行且读取到混淆结果时自动混淆 [慎用 - 不保证oj平台允许该行为]
 ---@field obscure boolean 是否启用模糊匹配 —— 词法模式 / 逐行模式
 ---@field warning_msg boolean 判题时是否输出警告信息
 ---@field max_workers integer 最大并发测题数量
