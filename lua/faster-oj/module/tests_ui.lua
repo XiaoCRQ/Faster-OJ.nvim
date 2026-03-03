@@ -41,21 +41,6 @@ function M.setup(cfg)
 	init_hl_group("TestUIStd", hls.stdio)
 end
 
----获取特定 key 的窗口 ID
-local function get_win_by_key(key)
-	local inst = ui.instances[GROUP]
-	if not inst then
-		return nil
-	end
-	local buf = inst.bufs[key]
-	for _, win in ipairs(inst.wins) do
-		if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf then
-			return win
-		end
-	end
-	return nil
-end
-
 ---设置缓冲区内容和高亮
 local function set_buf_content(key, lines, highlights)
 	local inst = ui.instances[GROUP]
@@ -156,7 +141,7 @@ function M.bind_keys()
 			end
 			for _, k in ipairs(maps.view) do
 				vim.keymap.set("n", k, function()
-					local win = get_win_by_key("si")
+					local win = ui.get_win_by_key(GROUP, "si")
 					if win then
 						vim.api.nvim_set_current_win(win)
 					end
@@ -181,7 +166,7 @@ function M.bind_keys()
 		else
 			for _, k in ipairs(maps.close) do
 				vim.keymap.set("n", k, function()
-					local win = get_win_by_key("tc")
+					local win = ui.get_win_by_key(GROUP, "tc")
 					if win then
 						vim.api.nvim_set_current_win(win)
 						vim.api.nvim_win_set_cursor(win, { M.state.current_idx + 1, 2 })
@@ -197,7 +182,7 @@ function M.bind_keys()
 					end
 				end
 				local next_key = DETAIL_CYCLE[(curr_idx + step - 1) % #DETAIL_CYCLE + 1]
-				local win = get_win_by_key(next_key)
+				local win = ui.get_win_by_key(GROUP, next_key)
 				if win then
 					vim.api.nvim_set_current_win(win)
 				end

@@ -27,21 +27,6 @@ function M.setup(cfg)
 	M.config = cfg or {}
 end
 
----获取特定 Key 的窗口
-local function get_win_by_key(key)
-	local inst = ui.instances[GROUP]
-	if not inst then
-		return nil
-	end
-	local buf = inst.bufs[key]
-	for _, win in ipairs(inst.wins) do
-		if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf then
-			return win
-		end
-	end
-	return nil
-end
-
 ---设置 Buffer 内容
 local function set_buf_content(key, lines)
 	local inst = ui.instances[GROUP]
@@ -151,7 +136,7 @@ local function bind_keys()
 			-- 进入编辑 (e/i)
 			for _, k in ipairs(maps.edit) do
 				vim.keymap.set("n", k, function()
-					local win = get_win_by_key("si")
+					local win = ui.get_win_by_key(GROUP, "si")
 					if win then
 						vim.api.nvim_set_current_win(win)
 					end
@@ -189,7 +174,7 @@ local function bind_keys()
 			for _, k in ipairs(maps.erase) do
 				vim.keymap.set("n", k, function()
 					local idx = vim.api.nvim_win_get_cursor(0)[1]
-					if vim.fn.confirm("Delete TC " .. idx .. "?", "&Yes\n&No", 2) == 1 then
+					if vim.fn.confirm("Delete TC " .. idx - 1 .. "?", "&Yes\n&No", 2) == 1 then
 						table.remove(M.state.json.tests, idx)
 						if #M.state.json.tests == 0 then
 							table.insert(M.state.json.tests, { input = "", output = "" })
@@ -205,7 +190,7 @@ local function bind_keys()
 			-- 编辑区 (si/so) 窗口映射
 			for _, k in ipairs(maps.close) do
 				vim.keymap.set("n", k, function()
-					local win = get_win_by_key("tc")
+					local win = ui.get_win_by_key(GROUP, "tc")
 					if win then
 						vim.api.nvim_set_current_win(win)
 						vim.api.nvim_win_set_cursor(win, { M.state.current_index, 2 })
@@ -223,7 +208,7 @@ local function bind_keys()
 					end
 				end
 				local target = EDIT_CYCLE[(curr_idx + step - 1) % #EDIT_CYCLE + 1]
-				local win = get_win_by_key(target)
+				local win = ui.get_win_by_key(GROUP, target)
 				if win then
 					vim.api.nvim_set_current_win(win)
 				end

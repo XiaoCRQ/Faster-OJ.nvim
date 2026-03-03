@@ -233,4 +233,16 @@ function M.setup_resize(group)
 	})
 end
 
+function M.get_win_by_key(group, key)
+	local inst = M.instances[group]
+	if not inst or not inst.wins then
+		return nil
+	end
+	local win = inst.wins[key]
+	if win and vim.api.nvim_win_is_valid(win) then
+		return win
+	end
+	return nil
+end
+
 return M
