@@ -31,14 +31,15 @@ Into a complete closed-loop workflow:
 
 # ✨ Core Features
 
-## 🚀 One-Click Submission
+## 🚀 One-Click Receive + Submission
 
-Send code directly from Neovim to the browser extension for automatic OJ submission — no more copy & paste.
+1. Neovim receives problem data sent from the browser.
+2. Neovim sends code to the browser extension for OJ submission.
 
 Works with browser extensions:
 
-* Faster-OJ
-* Competitive Companion
+* [Competitive Companion](https://github.com/jmerle/competitive-companion) —— Receive Problems
+* [Faster-OJ](https://github.com/XiaoCRQ/Faster-OJ) —— Auto Submission
 
 ---
 
@@ -191,8 +192,8 @@ Workflow explanation:
 * Neovim (latest stable recommended)
 * Browser extensions:
 
-  * Faster-OJ
-  * Competitive Companion
+  * [Competitive Companion](https://github.com/jmerle/competitive-companion) —— Receive Problems
+  * [Faster-OJ](https://github.com/XiaoCRQ/Faster-OJ) —— Auto Submission
 
 ---
 

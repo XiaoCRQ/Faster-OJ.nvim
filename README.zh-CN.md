@@ -31,14 +31,15 @@
 
 # ✨ 核心特性
 
-## 🚀 一键自动提交
+## 🚀 一键接收 + 提交
 
-直接从 Neovim 将代码发送至浏览器插件完成 OJ 提交，彻底告别复制粘贴。
+1. 由 Neovim 接受从浏览发送的题目数据
+2. 由 Neovim 将代码发送至浏览器插件完成 OJ 提交
 
 配合浏览器插件：
 
-* Faster-OJ
-* Competitive Companion
+* [Competitive Companion](https://github.com/jmerle/competitive-companion) —— 题目接收
+* [Faster-OJ](https://github.com/XiaoCRQ/Faster-OJ) —— 自动提交
 
 ---
 
@@ -190,8 +191,8 @@ Online Judge
 * Neovim (推荐最新稳定版)
 * 浏览器插件：
 
-  * Faster-OJ
-  * Competitive Companion
+  * [Competitive Companion](https://github.com/jmerle/competitive-companion) —— 题目接收
+  * [Faster-OJ](https://github.com/XiaoCRQ/Faster-OJ) —— 自动提交
 
 ---
 
@@ -323,7 +324,7 @@ map("n", "<leader>cdd", ":FOJ erase<CR>", vim.tbl_extend("force", opts, { desc =
 
 | 功能    | Windows | Linux | macOS |
 | ----- | ------- | ----- | ----- |
-| 接收题目  | ✅       | ✅     | ✅     |
+| 题目接收  | ✅       | ✅     | ✅     |
 | 本地测试  | ✅       | ✅     | ✅     |
 | 编辑案例  | ✅       | ✅     | ✅     |
 | 问题管理  | ✅       | ✅     | ✅     |
