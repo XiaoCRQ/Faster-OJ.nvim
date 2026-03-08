@@ -5,199 +5,50 @@
 ![image](https://raw.githubusercontent.com/XiaoCRQ/faster-oj.nvim/main/img/test.png)
 ![image](https://raw.githubusercontent.com/XiaoCRQ/faster-oj.nvim/main/img/edit.png)
 
-<p>⚡ Build a complete Competitive Programming automation workflow inside Neovim.</p>
+<p>⚡ Build a complete Competitive Programming automation workflow in Neovim.</p>
 
 [README.en-US](https://github.com/XiaoCRQ/Faster-OJ.nvim/blob/main/README.md) | [README.zh-CN](https://github.com/XiaoCRQ/Faster-OJ.nvim/blob/main/README.zh-CN.md)
 
 </div>
 
----
-
-**Faster-OJ.nvim** is a Neovim plugin designed for Competitive Programming.
-
-It integrates:
-
-* 📥 Problem fetching
-* 🧪 Local judging
-* 🌐 Browser auto-submission
-* 🖥 Local WebSocket service
-* 🧩 Multi-language compile & run
-
-Into a complete closed-loop workflow:
-
-> ✨ Write → Test locally → One-click submit → Wait for AC
+**Faster-OJ.nvim** is a Neovim plugin designed specifically for **Competitive Programming**. By integrating problem fetching, local judging, and automated submission, it aims to provide a **distraction-free and immersive coding environment** for solving problems.
 
 ---
 
 # ✨ Core Features
 
-## 🚀 One-Click Receive + Submission
+* **Fully Automated Workflow**: Fetch problems using [Competitive Companion](https://github.com/jmerle/competitive-companion) and submit solutions with the [Faster-OJ browser extension](https://github.com/XiaoCRQ/Faster-OJ), eliminating manual copy-paste completely.
+* **Dual Judging Engines**: Built-in **HTTP** and **WebSocket** services support concurrent judging (`max_workers`) and stream real-time test results directly to the UI.
+* **High-Performance Local Judge**: Supports **lexical fuzzy matching** (`obscure`) and **memory offset compensation** for Linux/macOS environments.
+* **Dual UI Layout System**:
+* **Judge UI (`tc_ui`)**: Displays test case results, input/output comparisons, expected output, and error details.
+* **Management UI (`tc_edit_ui`)**: Allows adding, deleting, and modifying test cases in real time with instant persistence.
 
-1. Neovim receives problem data sent from the browser.
-2. Neovim sends code to the browser extension for OJ submission.
-
-Works with browser extensions:
-
-* [Competitive Companion](https://github.com/jmerle/competitive-companion) —— Receive Problems
-* [Faster-OJ](https://github.com/XiaoCRQ/Faster-OJ) —— Auto Submission
-
----
-
-## 🖥 Built-in Local Judge Service (HTTP + WebSocket)
-
-The plugin includes:
-
-* HTTP server
-* WebSocket server
-* Automatic browser connection
-* Flexible startup modes (`http` / `ws` / `all`)
-
-Default ports:
-
-```
-HTTP: 127.0.0.1:10043
-WS:   127.0.0.1:10044
-```
-
-Supports browser connection timeout control, debug mode, and concurrency limits.
-
----
-
-## 🧪 High-Performance Local Testing System
-
-* Multi-language automatic compile & run
-* Configurable parallel testing (`max_workers`)
-* Line-by-line or lexical fuzzy matching
-* Optional compiler warning display
-* Real-time UI test status updates
-* Cached results with reopen support
-
----
-
-## 🧩 Multi-Language Support
-
-Built-in compile & run configurations:
-
-### Compiled Languages
-
-* C
-* C++
-* C#
-* Rust
-* Go
-* Java
-* Kotlin
-* Pascal
-* Swift
-* Zig
-
-### Scripting Languages
-
-* Python
-* JavaScript (Node)
-* TypeScript (ts-node)
-* Lua
-
-### Language Configuration Example
-
-```lua
-compile_command = { -- Empty for scripting languages
-  cpp = {
-    exec = "g++",
-    args = {
-      "-O2",
-      "-Wall",
-      "$(FABSPATH)",
-      "-o",
-      "$(DIR)/$(FNOEXT)",
-    },
-  },
-}
-
-run_command = {
-  cpp = { exec = "$(DIR)/$(FNOEXT)" },
-}
-```
-
----
-
-## 🧠 Built-in Code Obfuscation Support (Optional)
-
-Supports custom `code_obfuscator`.
-
-⚠ Notes:
-
-* Code is replaced only if the obfuscator runs successfully and returns valid output
-* Not all OJ platforms allow this behavior
-* Disabled by default
-
----
-
-## 🪟 Dual UI System
-
-### Judge UI (`tc_ui`)
-
-Features:
-
-* Multi-window layout
-* Visual test result display
-* Standard input/output comparison
-* Expected output comparison
-* Error message display
-* Custom key mappings
-* Custom highlight colors
-
----
-
-### Test Case Management UI (`tc_edit_ui`)
-
-Features:
-
-* Add test cases
-* Edit test cases
-* Delete test cases
-* Auto-save
-* Multi-window layout
+* **Smart Finder**: Deep integration with popular plugins such as `snacks`, `telescope`, and `fzf-lua` for quickly browsing templates and problem data.
 
 ---
 
 # 🔄 Recommended Workflow
 
 ```text
-Competitive Companion (Browser)
-        ↓
-Neovim + Faster-OJ.nvim
-        ↓
-Local Judge (HTTP + WS)
-        ↓
-Browser Extension (Faster-OJ)
-        ↓
-Online Judge
+Browser (Competitive Companion)  ➔  Neovim (Faster-OJ.nvim)  ➔  Local Judge (HTTP + WS)
+                                                                       ↓
+Online Judge  ⬅  Browser Extension (Faster-OJ)  ⬅  Submit Command
+
 ```
 
-Workflow explanation:
-
-1. Fetch problem via Competitive Companion
-2. Automatically send to Neovim
-3. Develop locally + `:FOJ run`
-4. One-click `:FOJ submit`
-5. Browser completes submission automatically
+1. **Fetch**: Click the browser plugin and the problem data is automatically synchronized to Neovim.
+2. **Develop**: Write your solution in Neovim with automatic template filling.
+3. **Test**: Run `:FOJ run` to start high-concurrency local judging.
+4. **Submit**: After passing locally, run `:FOJ submit` and the browser extension completes the submission automatically.
 
 ---
 
 # 📦 Installation
 
-## Requirements
+## 1. Minimal Installation Example
 
-* Neovim (latest stable recommended)
-* Browser extensions:
-
-  * [Competitive Companion](https://github.com/jmerle/competitive-companion) —— Receive Problems
-  * [Faster-OJ](https://github.com/XiaoCRQ/Faster-OJ) —— Auto Submission
-
----
-
-## Install with lazy.nvim
+Suitable for users who want an **out-of-the-box experience** with default configuration.
 
 ```lua
 {
@@ -206,76 +57,26 @@ Workflow explanation:
 }
 ```
 
----
+## 2. Classic Installation Example
 
-# ⚙️ Configuration
-
-Full default configuration is located at:
-
-```
-lua/faster-oj/default.lua
-```
-
----
-
-## Server Options
-
-| Option         | Default       | Description                      |
-| -------------- | ------------- | -------------------------------- |
-| `http_host`    | `"127.0.0.1"` | HTTP server host                 |
-| `http_port`    | `10043`       | HTTP server port                 |
-| `ws_host`      | `"127.0.0.1"` | WebSocket server host            |
-| `ws_port`      | `10044`       | WebSocket server port            |
-| `server_mod`   | `"all"`       | Mode: `http` / `ws` / `all`      |
-| `max_time_out` | `5`           | Browser connection timeout (sec) |
-| `debug`        | `false`       | Enable debug mode                |
-
----
-
-## Workspace Options
-
-| Option                 | Default    | Description               |
-| ---------------------- | ---------- | ------------------------- |
-| `work_dir`             | `""`       | Working directory         |
-| `json_dir`             | `.problem` | Problem data directory    |
-| `solve_dir`            | `.solve`   | Solved problems directory |
-| `template_dir`         | `""`       | Template directory        |
-| `template_default`     | `""`       | Default template file     |
-| `template_default_ext` | `.cpp`     | Default file extension    |
-| `open_new`             | `true`     | Auto-open new problems    |
-
----
-
-## Judge Options
-
-| Option             | Default | Description              |
-| ------------------ | ------- | ------------------------ |
-| `obscure`          | `true`  | Lexical matching mode    |
-| `warning_msg`      | `false` | Show compiler warnings   |
-| `max_workers`      | `5`     | Maximum parallel workers |
-| `linux_mem_offset` | -2900   | Linux memory offset      |
-| `macos_mem_offset` | -1500   | macOS memory offset      |
-
----
-
-## UI Customization
-
-Supports:
-
-* Custom window ratios
-* Custom layout tree
-* Custom key mappings
-* Custom highlight colors
-
-Highlight example:
+Suitable for users who want to customize working directories, templates, and compilation logic.
 
 ```lua
-highlights = {
-  windows = {
-    Header = "#c0c0c0",
-    Correct = "#00ff00",
-    Warning = "orange",
-    Wrong = "red",
+{
+  "xiaocrq/faster-oj.nvim",
+  opts = {
+    work_dir = "",                              -- Base working directory for the plugin
+    json_dir = ".problem",                      -- Directory for storing problem metadata
+    solve_dir = ".solve",                       -- Directory for archived solved problems
+    template_dir = ".template",                 -- Directory for code templates
+    template_default = ".template/template.cpp", -- Default template file
+    template_default_ext = ".cpp",               -- Default language extension
+    compile_command = {
+      -- Override or add compilation commands here
+    },
+    run_command = {
+      -- Override or add run commands here
+    },
   },
 }
 ```
@@ -284,71 +85,114 @@ highlights = {
 
 # 🛠 Common Commands
 
-| Command                    | Description            |
-| -------------------------- | ---------------------- |
-| `:FOJ`                     | Start full service     |
-| `:FOJ start [all/http/ws]` | Start specific service |
-| `:FOJ stop`                | Stop service           |
-| `:FOJ run`                 | Compile & run tests    |
-| `:FOJ test`                | Run tests only         |
-| `:FOJ submit`              | Auto submit            |
-| `:FOJ show`                | Open judge UI          |
-| `:FOJ close`               | Close UI               |
-| `:FOJ edit`                | Edit test cases        |
-| `:FOJ erase`               | Delete problem data    |
-| `:FOJ solve`               | Mark as solved         |
-| `:FOJ solve back`          | Unmark solved          |
+| Command            | Description                                                                               |
+| ------------------ | ----------------------------------------------------------------------------------------- |
+| `:FOJ`             | Start the full service (HTTP + WebSocket)                                                 |
+| `:FOJ start [mod]` | Start a specific mode: `all` / `http` / `ws`                                              |
+| `:FOJ stop`        | Stop all judging and communication services                                               |
+| `:FOJ run`         | **Core command**: save, compile, and run local test cases                                 |
+| `:FOJ test`        | Run local tests only (skip compilation)                                                   |
+| `:FOJ submit`      | Automatically send the current code to the browser extension via WebSocket for submission |
+| `:FOJ show`        | Open/toggle the local judge result UI                                                     |
+| `:FOJ edit`        | Enter test case editing mode (add/delete/modify)                                          |
+| `:FOJ solve`       | Mark the problem as solved and move files to `solve_dir`                                  |
+| `:FOJ solve back`  | Undo the solved mark and restore the problem                                              |
+| `:FOJ erase`       | Physically delete all local cached data of the current problem                            |
+| `:FOJ find [type]` | Quick browsing: `template` / `problem` / `json`                                           |
 
 ---
 
-# ⌨ Recommended Keybindings
+# ⚙️ Configuration Details (`opts`)
+
+## 1. Basic and Path Configuration
+
+| Parameter      | Type    | Default      | Description                                                |
+| -------------- | ------- | ------------ | ---------------------------------------------------------- |
+| `work_dir`     | string  | `""`         | Working directory of the plugin                            |
+| `json_dir`     | string  | `".problem"` | Directory storing problem metadata                         |
+| `solve_dir`    | string  | `".solve"`   | Directory storing solved problems                          |
+| `template_dir` | string  | `""`         | Directory storing template files                           |
+| `auto_open`    | boolean | `true`       | Automatically open the code file after receiving a problem |
+
+## 2. Server and Judging
+
+| Parameter      | Type    | Default | Description                                                  |
+| -------------- | ------- | ------- | ------------------------------------------------------------ |
+| `server_mod`   | string  | `"all"` | Startup mode: `http`, `ws`, or `all`                         |
+| `max_workers`  | integer | `5`     | Maximum number of concurrent judging workers                 |
+| `obscure`      | boolean | `true`  | Enable lexical fuzzy matching (ignore extra spaces/newlines) |
+| `max_time_out` | integer | `5`     | Maximum wait time for browser connection (seconds)           |
+| `debug`        | boolean | `false` | Enable debug mode                                            |
+
+## 3. Command Table Configuration (Core Customization)
+
+These two tables determine how the plugin compiles and runs programs in different languages.
+
+* **`compile_command`**: Compilation command table.
+
+* **Description**: Each command includes `exec` (executable) and `args` (argument list) with variable support.
+
+* **`run_command`**: Execution command table.
+
+* **Description**: Defines how compiled binaries or scripts are executed during judging (e.g., `python3`, `node`).
+
+### Minimal Example
+
+```lua
+compile_command = {
+  c = {
+    exec = "gcc",
+    args = { "-g", "-Wall", "$(FABSPATH)", "-o", ".output" .. "/$(FNOEXT)" },
+  },
+  cpp = {
+    exec = "g++",
+    args = { "-g", "-Wall", "$(FABSPATH)", "-o", ".output" .. "/$(FNOEXT)" },
+  },
+},
+run_command = {
+  c = { exec = ".output" .. "/$(FNOEXT)" },
+  cpp = { exec = ".output" .. "/$(FNOEXT)" },
+},
+```
+
+---
+
+# ⌨️ Recommended Keymaps
 
 ```lua
 local map = vim.keymap.set
 local opts = { noremap = true, silent = true }
 
-map("n", "<leader>cda", ":FOJ <CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Start" }))
-map("n", "<leader>cdq", ":FOJ stop<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Stop" }))
-map("n", "<leader>cdr", ":FOJ submit<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Submit" }))
-map("n", "<leader>cdt", ":FOJ run<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Judge" }))
-map("n", "<leader>cdT", ":FOJ run<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Judge (no compile)" }))
-map("n", "<leader>cdu", ":FOJ show<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Toggle UI" }))
-map("n", "<leader>cds", ":FOJ solve<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Mark solved" }))
-map("n", "<leader>cdS", ":FOJ solve back<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Unmark solved" }))
-map("n", "<leader>cde", ":FOJ edit<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Edit tests" }))
+-- Basic control
+map("n", "<leader>cda", ":FOJ<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Start coding session" }))
+map("n", "<leader>cdq", ":FOJ stop<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Stop services" }))
+map("n", "<leader>cdr", ":FOJ submit<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Submit solution" }))
+
+-- Judging and UI
+map("n", "<leader>cdt", ":FOJ run<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Compile and judge" }))
+map("n", "<leader>cdT", ":FOJ test<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Test only (no compile)" }))
+map("n", "<leader>cdu", ":FOJ show<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Toggle judge UI" }))
+map("n", "<leader>cde", ":FOJ edit<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Edit test cases" }))
+
+-- Data management
+map("n", "<leader>cds", ":FOJ solve<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Mark problem as solved" }))
+map("n", "<leader>cdS", ":FOJ solve back<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Undo solved mark" }))
 map("n", "<leader>cdd", ":FOJ erase<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Delete problem data" }))
+
+-- Finder
+map("n", "<leader>cdc", ":FOJ find template<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Find template files" }))
+map("n", "<leader>cdp", ":FOJ find problem<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Find problem history" }))
+map("n", "<leader>cdj", ":FOJ find json<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Find problem metadata" }))
 ```
 
 ---
 
-# 📊 Platform Support
+# 📊 Platform and Language Support
 
-| Feature            | Windows | Linux | macOS |
-| ------------------ | ------- | ----- | ----- |
-| Receive Problems   | ✅       | ✅     | ✅     |
-| Local Testing      | ✅       | ✅     | ✅     |
-| Edit Test Cases    | ✅       | ✅     | ✅     |
-| Problem Management | ✅       | ✅     | ✅     |
-| Auto Submission    | ✅       | ✅     | ✅     |
-| Multi-Language     | ✅       | ✅     | ✅     |
+* **Cross-platform**: Full support for **Windows, Linux, and macOS**.
+* **Built-in language support**:
+* **Compiled languages**: C, C++, C#, Rust, Go, Java, Kotlin, Pascal, Swift, Zig.
+* **Scripting languages**: Python, JavaScript (Node), TypeScript (ts-node), Lua.
 
----
-
-# 🎯 Design Goals
-
-* Extreme automation
-* Zero copy-paste
-* Minimal context switching
-* Strong extensibility
-* High-performance parallel testing
-* Optimized for competitive environments
-
----
-
-If you want:
-
-* 🚀 Maximum problem-solving efficiency
-* 🧠 Native Neovim experience
-* 🔥 A true one-click AC workflow
-
-Then **Faster-OJ.nvim** will become your ultimate competitive programming tool.
+We hope **Faster-OJ.nvim** makes your competitive programming workflow faster and more enjoyable.
+If you have questions or suggestions, feel free to open an Issue or submit a PR!

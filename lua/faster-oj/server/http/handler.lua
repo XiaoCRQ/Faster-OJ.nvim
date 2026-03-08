@@ -131,7 +131,7 @@ function M.handle(json, cfg)
 		log("File written to", target_file)
 	end
 
-	if M.config.open_new then
+	if M.config.auto_open then
 		vim.cmd("edit " .. vim.fn.fnameescape(target_file))
 		vim.api.nvim_win_set_cursor(0, { 1, 0 })
 	end

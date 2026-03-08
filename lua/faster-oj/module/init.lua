@@ -131,4 +131,74 @@ function M.erase()
 	end
 end
 
+function M.find(sub)
+	local picker_title
+	local path
+
+	if sub == "template" then
+		path = M.config.template_dir
+		picker_title = "Template Files"
+	elseif sub == "problem" then
+		path = M.config.work_dir
+		picker_title = "Problem Files"
+	elseif sub == "json" then
+		path = M.config.json_dir
+		picker_title = "Json Files"
+	else
+		return
+	end
+
+	path = vim.fn.expand(path)
+
+	-- snacks.nvim
+	local ok, snacks = pcall(require, "snacks")
+	if ok and snacks.picker then
+		snacks.picker.files({
+			cwd = path,
+			title = picker_title,
+		})
+		return
+	end
+
+	-- telescope.nvim
+	local ok_telescope, telescope = pcall(require, "telescope.builtin")
+	if ok_telescope then
+		telescope.find_files({
+			cwd = path,
+			prompt_title = picker_title,
+		})
+		return
+	end
+
+	-- fzf-lua
+	local ok_fzf, fzf = pcall(require, "fzf-lua")
+	if ok_fzf then
+		fzf.files({
+			cwd = path,
+			prompt = picker_title .. "> ",
+		})
+		return
+	end
+
+	-- mini.pick
+	local ok_mini, mini_pick = pcall(require, "mini.pick")
+	if ok_mini then
+		mini_pick.builtin.files(nil, { source = { cwd = path } })
+		return
+	end
+
+	-- vim.ui.select fallback
+	if vim.ui and vim.ui.select then
+		local files = vim.fn.globpath(path, "*", false, true)
+		if #files == 0 then
+			return
+		end
+		vim.ui.select(files, { prompt = picker_title }, function(choice)
+			if choice then
+				vim.cmd("edit " .. choice)
+			end
+		end)
+		return
+	end
+end
 return M

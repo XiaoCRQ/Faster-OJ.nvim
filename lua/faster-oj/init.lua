@@ -105,6 +105,9 @@ function M.setup(opts)
 		erase = function()
 			module.erase()
 		end,
+		find = function(sub)
+			module.find(sub)
+		end,
 	}
 
 	vim.api.nvim_create_user_command("FOJ", function(params)
