@@ -165,7 +165,7 @@ function M.solve_back()
 				end
 
 				-- 4. 打开文件
-				if M.config.open_new then
+				if M.config.auto_open then
 					vim.cmd("edit " .. vim.fn.fnameescape(f_path))
 					vim.api.nvim_win_set_cursor(0, { 1, 0 })
 				end

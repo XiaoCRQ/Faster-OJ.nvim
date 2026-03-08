@@ -152,11 +152,16 @@ end
 function M.compile(file_path, need_compile, on_compile_finish)
 	local ext = vim.fn.fnamemodify(file_path, ":e")
 	local cmd_raw = M.config.compile_command[ext]
-	last_compile_msg = nil
 
-	if not cmd_raw or not cmd_raw.exec or cmd_raw.exec == "" or need_compile == false then
+	if not cmd_raw or not cmd_raw.exec or cmd_raw.exec == "" then
+		last_compile_msg = nil
 		return on_compile_finish(true, "", false)
 	end
+	if need_compile == false then
+		return on_compile_finish(true, "", false)
+	end
+
+	last_compile_msg = nil
 
 	local vars = utils.get_vars(file_path)
 	local exec = utils.expand(cmd_raw.exec, vars)
@@ -242,6 +247,10 @@ local function run_single_task(cmd_raw, vars, input, std_out, tl, ml_mb, cb)
 				used_memory = max_rss_kb,
 				state = { type = "AC" },
 			}
+
+			if M.config.warning_msg and last_compile_msg then
+				res.state.msg = last_compile_msg
+			end
 
 			-- 状态判定 (优先级: OLE > MLE > TLE > RE > WA > AC)
 			if is_ole then
