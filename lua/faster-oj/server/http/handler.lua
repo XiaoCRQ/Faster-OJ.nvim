@@ -134,6 +134,7 @@ function M.handle(json, cfg)
 	if M.config.auto_open then
 		vim.cmd("edit " .. vim.fn.fnameescape(target_file))
 		vim.api.nvim_win_set_cursor(0, { 1, 0 })
+		-- print("[FOJ] " .. json.name)
 	end
 end
 
