@@ -1,4 +1,5 @@
----@module "faster-oj.module.tests_ui"
+---@module "faster-oj.module.ui.tests"
+
 local ui = require("faster-oj.module.ui")
 local M = {}
 
@@ -22,12 +23,19 @@ M.state = {
 	current_idx = 1,
 }
 
----初始化高亮组
+---@param level string
+---@param func string
+---@param msg string
+local function log(level, func, msg)
+	if M.config and M.config.debug then
+		print(string.format("[FOJ][tests_ui][%s] %s: %s", level, func, msg))
+	end
+end
+
 function M.setup(cfg)
 	M.config = cfg
 	local hls = cfg.highlights or {}
 
-	-- 定义初始化辅助函数
 	local function init_hl_group(prefix, colors)
 		colors = colors or {}
 		vim.api.nvim_set_hl(0, prefix .. "Header", { fg = colors.Header or "#808080", bold = true })
@@ -36,7 +44,6 @@ function M.setup(cfg)
 		vim.api.nvim_set_hl(0, prefix .. "Wrong", { fg = colors.Wrong or "#ff0000" })
 	end
 
-	-- 初始化两套独立的高亮：Win(窗口列表) 和 Std(标准读写详情)
 	init_hl_group("TestUIWin", hls.windows)
 	init_hl_group("TestUIStd", hls.stdio)
 end
@@ -62,7 +69,7 @@ local function set_buf_content(key, lines, highlights)
 	end
 end
 
----刷新详情窗口（使用 Std 高亮）
+---刷新详情窗口
 local function update_details(index)
 	local tc = M.state.testcases[index]
 	if not tc then
@@ -73,12 +80,11 @@ local function update_details(index)
 	set_buf_content("eo", vim.split(tc.expected or "", "\n"))
 	set_buf_content("info", tc.state and tc.state.msg and vim.split(tc.state.msg, "\n") or {})
 
-	-- 只有 Standard Output (so) 需要根据对比结果着色，使用 TestUIStd 系列
 	local out_hls = {}
 	if tc.diff then
 		for _, d in ipairs(tc.diff) do
 			table.insert(out_hls, {
-				group = "TestUIStdWrong", -- 使用 stdio 配置中的 Wrong 颜色
+				group = "TestUIStdWrong",
 				line = d.line,
 				col_start = d.start_col,
 				col_end = d.end_col,
@@ -88,7 +94,7 @@ local function update_details(index)
 	set_buf_content("so", vim.split(tc.output or "", "\n"), out_hls)
 end
 
----更新主 UI 及 TC 列表（使用 Windows 高亮）
+---更新 TC 列表和详情
 function M.update(size, testcases)
 	vim.schedule(function()
 		M.state.size, M.state.testcases = size, testcases or {}
@@ -96,7 +102,6 @@ function M.update(size, testcases)
 			return
 		end
 
-		-- TC 列表头部使用 TestUIWinHeader
 		local lines, hls = { TC_HEADER }, { { group = "TestUIWinHeader", line = 0, col_start = 0, col_end = -1 } }
 
 		for i = 0, size - 1 do
@@ -108,7 +113,6 @@ function M.update(size, testcases)
 				mem = tc.used_memory < 1024 and (tc.used_memory .. "KB")
 					or (string.format("%.2fMB", tc.used_memory / 1024))
 
-				-- 根据状态选择 TestUIWinCorrect 或 TestUIWinWrong
 				hl = (s_type == "AC") and "TestUIWinCorrect" or "TestUIWinWrong"
 			end
 			if s_type ~= "Running" then
@@ -116,7 +120,6 @@ function M.update(size, testcases)
 			end
 			table.insert(lines, string.format(TC_FORMAT, "TC " .. i, s_type, time, mem))
 			if hl then
-				-- 状态列着色
 				table.insert(hls, { group = hl, line = i + 1, col_start = 9, col_end = 18 })
 			end
 		end
@@ -125,8 +128,6 @@ function M.update(size, testcases)
 		update_details(M.state.current_idx)
 	end)
 end
-
---- ... 其余函数 (bind_keys, show, close, clear) 保持之前逻辑不变 ...
 
 function M.bind_keys()
 	local inst = ui.instances[GROUP]
@@ -210,12 +211,11 @@ function M.show()
 			local inst = ui.instances[GROUP]
 			local tc_buf = inst.bufs.tc
 
-			-- 核心修复：处理命令行 :q 或手动关闭窗口的情况
+			-- 处理 :q 手动关闭窗口
 			for _, buf in pairs(inst.bufs) do
 				vim.api.nvim_create_autocmd("BufWinLeave", {
 					buffer = buf,
 					callback = function()
-						-- 使用 schedule 确保在窗口关闭流程中不会产生冲突
 						vim.schedule(function()
 							if M.is_open() then
 								M.close()
@@ -237,8 +237,8 @@ function M.show()
 					end
 					M.state.current_idx = r - 1
 					update_details(M.state.current_idx)
-				end,
-			})
+			end,
+		})
 			M.update(M.state.size, M.state.testcases)
 		end)
 	end)

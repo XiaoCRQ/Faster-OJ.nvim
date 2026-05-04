@@ -1,35 +1,31 @@
 ---@module "faster-oj.server.ws"
 
 local uv = vim.uv or vim.loop
+local notify = require("faster-oj.module.notify")
 local M = {}
 local is_win = vim.fn.has("win32") == 1
 local is_mac = vim.fn.has("mac") == 1
 
---- 可选回调函数，收到 stdout 输出时触发
 ---@type fun(data:string)?
 M.on_message = nil
---- 可选回调函数，收到 stderr 输出时触发
 ---@type fun(data:string)?
 M.on_err = nil
 
----@class FOJWSModule
----@field handle userdata|nil 运行的进程句柄
----@field pipe table 管道表，包含 stdin/stdout/stderr
----@field connections number 当前连接的客户端数量
 M.handle = nil
 M.pipe = { stdin = nil, stdout = nil, stderr = nil }
-M.connections = 0 -- 存储当前连接数
+M.connections = 0
 
----@private
-local function log(...)
+---@param level string
+---@param func string
+---@param msg string
+local function log(level, func, msg)
 	if M.config and M.config.debug then
-		print("[FOJ][ws]", ...)
+		print(string.format("[FOJ][ws][%s] %s: %s", level, func, msg))
 	end
 end
 
----@private
+---获取平台对应的 mini-wsbroad 二进制路径
 local function get_bin_path()
-	-- 获取当前脚本所在目录
 	local script_path = debug.getinfo(1).source:sub(2)
 	local bin_dir = vim.fn.fnamemodify(script_path, ":p:h")
 	local bin_name
@@ -43,15 +39,9 @@ local function get_bin_path()
 	return bin_dir .. "/" .. bin_name
 end
 
---- 初始化模块
----@param cfg table 配置项
----   cfg.ws_host string WebSocket 服务绑定地址（可选，默认 127.0.0.1）
----   cfg.ws_port number WebSocket 服务端口（可选，默认 10044）
----   cfg.debug boolean 是否打印调试信息
 function M.setup(cfg)
 	M.config = cfg or {}
 
-	-- 注册自动清理逻辑
 	vim.api.nvim_create_autocmd("VimLeavePre", {
 		group = vim.api.nvim_create_augroup("FOJ_WS_Cleanup", { clear = true }),
 		callback = function()
@@ -67,16 +57,14 @@ function M.setup(cfg)
 	})
 end
 
---- 检查 WebSocket 服务是否运行
 ---@return boolean
 function M.is_open()
 	return M.handle ~= nil
 end
 
--- 启动 WebSocket 服务
 function M.start()
 	if M.is_open() then
-		log("WebSocket server already running")
+		log("WARN", "start", "Already running")
 		return
 	end
 
@@ -84,65 +72,69 @@ function M.start()
 	local host = M.config.ws_host or "127.0.0.1"
 	local port = M.config.ws_port or 10044
 
-	-- 创建管道
 	M.pipe.stdin = uv.new_pipe(false)
 	M.pipe.stdout = uv.new_pipe(false)
 	M.pipe.stderr = uv.new_pipe(false)
 
-	-- 启动进程
 	M.handle = uv.spawn(bin_path, {
 		args = { host, tostring(port) },
 		stdio = { M.pipe.stdin, M.pipe.stdout, M.pipe.stderr },
 	}, function(code, signal)
-		log("WebSocket server exited", code, signal)
+		log("INFO", "spawn", string.format("Exited code=%d signal=%d", code, signal))
 		M.cleanup()
 	end)
 
 	if not M.handle then
-		error("Failed to start process at: " .. bin_path)
+		log("ERROR", "start", "Spawn failed: " .. bin_path)
+		return
 	end
 
-	-- 监听输出流
-	M.pipe.stdout:read_start(function(err, data)
+	M.pipe.stdout:read_start(function(_, data)
 		if data then
-			-- 解析连接数: [WS] Connected clients: 0
 			local count = data:match("%[WS%] Connected clients: (%d+)")
 			if count then
-				M.connections = tonumber(count)
-				log("Updated connections:", M.connections)
-			end
+				local new_count = tonumber(count)
+				local old_count = M.connections
+				M.connections = new_count
+				log("INFO", "stdout", "Connected clients: " .. M.connections)
 
-			log("[stdout]", data:gsub("\n$", ""))
+				if new_count > old_count then
+					vim.schedule(function()
+						notify.show("Browser connected", "DONE")
+					end)
+				elseif new_count < old_count then
+					vim.schedule(function()
+						notify.show("Browser disconnected", "WARN")
+					end)
+				end
+			end
 			if M.on_message then
 				M.on_message(data)
 			end
 		end
 	end)
 
-	M.pipe.stderr:read_start(function(err, data)
+	M.pipe.stderr:read_start(function(_, data)
 		if data then
-			log("[stderr]", data:gsub("\n$", ""))
+			log("WARN", "stderr", data:gsub("\n$", ""))
 			if M.on_err then
 				M.on_err(data)
 			end
 		end
 	end)
 
-	log(string.format("WebSocket server starting at ws://%s:%d", host, port))
+	log("INFO", "start", string.format("ws://%s:%d", host, port))
 end
 
--- 请求连接状态
 function M.request_status()
 	M.send("status")
 end
 
---- 获取本地缓存的连接数
 ---@return number
 function M.get_connection_count()
 	return M.connections
 end
 
--- 停止 WebSocket 服务
 function M.stop()
 	if not M.is_open() then
 		return
@@ -163,14 +155,13 @@ function M.stop()
 	end)
 end
 
---- 发送命令到 WebSocket 服务
 ---@param text string
 function M.send(text)
 	if M.pipe and M.pipe.stdin then
 		M.pipe.stdin:write(text .. "\n")
-		log("Sent command:", text)
+		log("INFO", "send", text)
 	else
-		log("Cannot send, process not running")
+		log("WARN", "send", "Process not running")
 	end
 end
 
@@ -187,16 +178,16 @@ function M.cleanup()
 	end
 end
 
---- 异步等待连接
---- @param timeout_s number 超时时间（秒）
---- @param callback function 成功连接后的回调函数，参数为当前连接数
+---异步等待浏览器连接
+---@param timeout_s number 超时 (秒)
+---@param callback fun(count:number)
 function M.wait_for_connection(timeout_s, callback)
 	if not M.is_open() then
-		log("WebSocket server is not running, cancel waiting.")
+		log("WARN", "wait_for_connection", "Server not running")
 		return
 	end
 
-	local interval = 100 -- 0.1s = 100ms
+	local interval = 100
 	local elapsed_ms = 0
 	local timeout_ms = timeout_s * 1000
 	local timer = uv.new_timer()
@@ -208,9 +199,7 @@ function M.wait_for_connection(timeout_s, callback)
 		if count > 0 then
 			timer:stop()
 			timer:close()
-			log(string.format("Connection detected: %d. Calling callback.", count))
-
-			-- 使用 vim.schedule 确保回调在 Neovim 主事件循环中执行（安全操作 UI 或 Buffer）
+			log("INFO", "wait_for_connection", "Detected " .. count .. " client(s)")
 			vim.schedule(function()
 				callback(count)
 			end)
@@ -221,8 +210,7 @@ function M.wait_for_connection(timeout_s, callback)
 		if elapsed_ms >= timeout_ms then
 			timer:stop()
 			timer:close()
-			print("[FOJ][ws] Unable to connect to the browser.")
-			log("Wait for connection timed out.")
+			log("WARN", "wait_for_connection", "Timed out")
 		end
 	end)
 end

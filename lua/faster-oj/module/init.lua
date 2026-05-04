@@ -1,94 +1,116 @@
 ---@module "faster-oj.module.init"
 
----@type table
-local ui = require("faster-oj.module.tests_ui")
-
----@type table
+local ui = require("faster-oj.module.ui.tests")
 local utils = require("faster-oj.module.utils")
-
----@type table
 local runner = require("faster-oj.module.run")
-
----@type table
 local submit = require("faster-oj.module.submit")
-
----@type table
-local edit = require("faster-oj.module.tests_edit_ui")
+local edit = require("faster-oj.module.ui.tests_edit")
+local stress_mod = require("faster-oj.module.stress")
+local notify = require("faster-oj.module.notify")
 
 ---@class FOJ.moduleModule
----@field config FOJ.Config 当前生效配置
----@field setup fun(cfg:FOJ.Config) 初始化 module 模块
----@field submit fun(send:any) 提交当前代码
----@field run fun() 编译并运行当前文件
----@field show fun() 打开 UI
----@field close fun() 关闭 UI
+---@field config FOJ.Config
+---@field setup fun(cfg:FOJ.Config)
+---@field submit fun(send:any)
+---@field run fun(need_compile:boolean)
+---@field show fun()
+---@field close fun()
 local M = {}
 
----Debug 日志输出（仅在 config.debug = true 时启用）
----@param ... any
-local function log(...)
+---@param level string
+---@param func string
+---@param msg string
+local function log(level, func, msg)
 	if M.config.debug then
-		print("[FOJ][module]", ...)
+		print(string.format("[FOJ][module][%s] %s: %s", level, func, msg))
 	end
 end
 
----@param cfg FOJ.Config 用户传入配置
 function M.setup(cfg)
-	---@type FOJ.Config
 	M.config = cfg or {}
-
 	ui.setup(cfg)
 	utils.setup(cfg)
 	runner.setup(cfg)
 	submit.setup(cfg)
 	edit.setup(cfg)
+	stress_mod.setup(cfg)
 end
 
----@param send any WebSocket 对象，直接传给 submit 模块
 function M.submit(send)
 	submit.submit(send)
 end
 
 function M.run(need_compile)
 	edit.close(function()
-		---@type string
 		local file_path = utils.get_file_path()
-
-		---@type table|nil
 		local json = utils.get_json_file()
-
-		---@type table
 		local tests = {}
+		local test_count = 0
 
-		vim.cmd("write") -- 保存当前缓冲区
+		vim.cmd("write")
 
 		if json == nil then
-			log("No problem data ...")
+			log("WARN", "run", "No problem data found")
+			notify.show("No problem data found", "WARN")
 			return
 		end
 
-		ui.update(#json.tests, tests)
+		ui.update(json.testCount or 0, tests)
 
-		log("Commencing code testing...")
+		local ext = vim.fn.fnamemodify(file_path, ":e")
+		local has_compile = M.config.compile_command[ext]
+			and M.config.compile_command[ext].exec
+			and M.config.compile_command[ext].exec ~= ""
 
-		runner.compile(file_path, need_compile, function(success, msg, need)
+		local compile_spin = nil
+		if has_compile and need_compile ~= false then
+			compile_spin = notify.spinner_start("Compiling " .. vim.fn.fnamemodify(file_path, ":t") .. " ...")
+		end
+
+		log("INFO", "run", "Starting test execution")
+
+		runner.compile(file_path, need_compile, function(success, msg, did_compile)
 			if not success then
-				print("[FOJ] Compilation Failed:\n" .. msg)
+				if compile_spin then
+					notify.spinner_fail(compile_spin, "Compilation FAILED")
+				end
+				vim.notify("[FOJ] Compilation FAILED:\n" .. msg, vim.log.levels.ERROR)
 				return
 			end
 
-			if need then
-				log("Compilation Success!")
+			if did_compile then
+				notify.spinner_done(compile_spin, "Compilation OK")
 			end
 
 			if not ui.is_open() then
 				ui.show()
 			end
 
+			log("INFO", "run", "Running " .. (json.testCount or 0) .. " test(s)")
+			notify.show("Running " .. (json.testCount or 0) .. " test(s) ...", "INFO", 2000)
+
 			runner.run(file_path, json, function(res)
-				log("Tests " .. res.test_index .. " over")
+				log("INFO", "run", "Test " .. res.test_index .. " completed")
 				tests[res.test_index] = res
-				ui.update(#json.tests, tests)
+				ui.update(json.testCount or 0, tests)
+
+				local finished = 0
+				local ac_count = 0
+				for _, t in pairs(tests) do
+					finished = finished + 1
+					if t.state and t.state.type == "AC" then
+						ac_count = ac_count + 1
+					end
+				end
+				if finished == (json.testCount or 0) then
+					log("INFO", "run", string.format("All done: %d/%d AC", ac_count, finished))
+					local total = json.testCount or 0
+					if ac_count == total then
+						notify.show(string.format("Done: %d/%d AC", ac_count, total), "DONE")
+					else
+						notify.show(string.format("Done: %d/%d AC", ac_count, total), "WARN")
+					end
+				end
 			end)
 		end)
 	end)
@@ -103,9 +125,14 @@ function M.show()
 	ui.show()
 end
 
----关闭 UI
 function M.close()
 	ui.close()
+end
+
+---启动对拍测试
+---@param opts? table
+function M.stress(opts)
+	stress_mod.stress(opts)
 end
 
 function M.edit()
@@ -120,14 +147,15 @@ end
 function M.erase()
 	local file_path = utils.get_file_path()
 	local file_name = vim.fn.fnamemodify(file_path, ":t:r")
-	local file_json_path = vim.fn.fnamemodify(M.config.json_dir .. "/" .. file_name .. ".json", ":p")
+	local problem_dir = utils.get_problem_dir()
 	if file_path == "" or file_name == "" then
 		return
 	end
 	if vim.fn.confirm("Delete " .. file_name .. "?", "&Yes\n&No", 2) == 1 then
 		vim.cmd("bd!")
 		utils.erase(file_path)
-		utils.erase(file_json_path)
+		utils.delete_problem_dir(problem_dir)
+		notify.show("Deleted: " .. file_name, "INFO")
 	end
 end
 
@@ -141,53 +169,39 @@ function M.find(sub)
 	elseif sub == "problem" then
 		path = M.config.work_dir
 		picker_title = "Problem Files"
-	elseif sub == "json" then
+	elseif sub == "data" then
 		path = M.config.json_dir
-		picker_title = "Json Files"
+		picker_title = "Problem Data"
 	else
 		return
 	end
 
 	path = vim.fn.expand(path)
 
-	-- snacks.nvim
 	local ok, snacks = pcall(require, "snacks")
 	if ok and snacks.picker then
-		snacks.picker.files({
-			cwd = path,
-			title = picker_title,
-		})
+		snacks.picker.files({ cwd = path, title = picker_title })
 		return
 	end
 
-	-- telescope.nvim
 	local ok_telescope, telescope = pcall(require, "telescope.builtin")
 	if ok_telescope then
-		telescope.find_files({
-			cwd = path,
-			prompt_title = picker_title,
-		})
+		telescope.find_files({ cwd = path, prompt_title = picker_title })
 		return
 	end
 
-	-- fzf-lua
 	local ok_fzf, fzf = pcall(require, "fzf-lua")
 	if ok_fzf then
-		fzf.files({
-			cwd = path,
-			prompt = picker_title .. "> ",
-		})
+		fzf.files({ cwd = path, prompt = picker_title .. "> " })
 		return
 	end
 
-	-- mini.pick
 	local ok_mini, mini_pick = pcall(require, "mini.pick")
 	if ok_mini then
 		mini_pick.builtin.files(nil, { source = { cwd = path } })
 		return
 	end
 
-	-- vim.ui.select fallback
 	if vim.ui and vim.ui.select then
 		local files = vim.fn.globpath(path, "*", false, true)
 		if #files == 0 then
@@ -201,4 +215,5 @@ function M.find(sub)
 		return
 	end
 end
+
 return M

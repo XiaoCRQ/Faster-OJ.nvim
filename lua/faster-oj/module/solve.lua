@@ -1,6 +1,7 @@
 ---@module "faster-oj.module.solve"
 
 local utils = require("faster-oj.module.utils")
+local notify = require("faster-oj.module.notify")
 
 ---@class FOJ.SolveModule
 ---@field config FOJ.Config
@@ -8,21 +9,20 @@ local M = {}
 
 local uv = vim.uv or vim.loop
 
----@param cfg FOJ.Config 用户传入配置
 function M.setup(cfg)
-	---@type FOJ.Config
 	M.config = cfg or {}
 end
 
----Debug 日志输出
-local function log(...)
+---@param level string
+---@param func string
+---@param msg string
+local function log(level, func, msg)
 	if M.config and M.config.debug then
-		print("[FOJ][solve]", ...)
+		print(string.format("[FOJ][solve][%s] %s: %s", level, func, msg))
 	end
 end
 
 ---确保目录存在
----@param path string
 local function ensure_dir(path)
 	if vim.fn.isdirectory(path) == 0 then
 		vim.fn.mkdir(path, "p")
@@ -30,7 +30,6 @@ local function ensure_dir(path)
 end
 
 ---读取文件行
----@param path string
 ---@return string[]
 local function read_lines(path)
 	if vim.fn.filereadable(path) == 0 then
@@ -40,82 +39,108 @@ local function read_lines(path)
 end
 
 ---写入文件行
----@param path string
----@param lines string[]
 local function write_lines(path, lines)
 	vim.fn.writefile(lines, path)
 end
 
+---裁剪历史条目到 max_solve_history
+---@param history_path string
+local function trim_history(history_path)
+	local max_entries = (M.config and M.config.max_solve_history) or 100
+	local lines = read_lines(history_path)
+	if #lines <= max_entries then
+		return
+	end
+	-- 保留最新的 max_entries 条
+	local trimmed = {}
+	for i = #lines - max_entries + 1, #lines do
+		table.insert(trimmed, lines[i])
+	end
+	write_lines(history_path, trimmed)
+	log("INFO", "trim_history", string.format("Trimmed %d -> %d entries", #lines, #trimmed))
+end
+
+---归档当前题目到 solve_dir
 function M.solve()
 	local file_path = utils.get_file_path()
-	local file_json_path = utils.get_json_path()
 
 	if not file_path or file_path == "" then
-		log("No file to solve.")
+		log("WARN", "solve", "No file to solve")
 		return
 	end
 
 	if not M.config or not M.config.solve_dir then
-		log("solve_dir not configured.")
+		log("ERROR", "solve", "solve_dir not configured")
 		return
 	end
 
 	local solve_dir = M.config.solve_dir
+	local json_dir = M.config.json_dir
 	ensure_dir(solve_dir)
 
-	-- 1. 处理源码文件
 	local filename = vim.fn.fnamemodify(file_path, ":t")
+	local problem_name = vim.fn.fnamemodify(file_path, ":t:r")
 	local abs_original = vim.fn.fnamemodify(file_path, ":p")
-	local target_path = solve_dir .. "/" .. filename
 
+	-- 1. 移动源文件
 	vim.cmd("write")
+	local target_path = solve_dir .. "/" .. filename
 
 	local ok, err = uv.fs_rename(abs_original, target_path)
 	if not ok then
-		log("Move failed:", err)
+		log("ERROR", "solve", "Move source failed: " .. (err or ""))
 		return
 	end
 	vim.cmd("bd!")
 
-	-- 2. 处理 JSON 文件 (如果存在)
-	local json_filename = ""
-	local abs_json_original = ""
+	-- 2. 移动题目文件夹
+	local problem_dir = json_dir .. "/" .. problem_name
+	local problem_target = solve_dir .. "/" .. problem_name
+	local has_problem_dir = vim.fn.isdirectory(problem_dir) == 1
 
-	if file_json_path and file_json_path ~= "" and vim.fn.filereadable(file_json_path) == 1 then
-		json_filename = vim.fn.fnamemodify(file_json_path, ":t")
-		abs_json_original = vim.fn.fnamemodify(file_json_path, ":p")
-		local target_json_path = solve_dir .. "/" .. json_filename
-
-		local jok, jerr = uv.fs_rename(abs_json_original, target_json_path)
-		if not jok then
-			log("JSON move failed:", jerr)
-			-- 即使 JSON 失败也继续，或者你可以选择 return
+	if has_problem_dir then
+		local pok, perr = uv.fs_rename(problem_dir, problem_target)
+		if not pok then
+			log("WARN", "solve", "Move problem dir failed: " .. (perr or ""))
+			has_problem_dir = false
 		end
 	end
 
-	-- 3. 更新 History (4 列格式)
+	-- 3. 写入历史
 	local history_path = solve_dir .. "/.history"
-	-- 格式: file_name \t file_raw_path \t file_json_name \t file_raw_json_path
-	local history_line = string.format("%s\t%s\t%s\t%s", filename, abs_original, json_filename, abs_json_original)
+	-- 格式: file_name \t file_raw_path \t problem_name \t problem_original_dir
+	local history_line = string.format(
+		"%s\t%s\t%s\t%s",
+		filename,
+		abs_original,
+		problem_name,
+		has_problem_dir and problem_dir or ""
+	)
 
 	local lines = read_lines(history_path)
 	table.insert(lines, history_line)
 	write_lines(history_path, lines)
 
-	log("Solved:", filename, json_filename ~= "" and ("with " .. json_filename) or "")
+	-- 裁剪超出上限的历史条目
+	trim_history(history_path)
+
+	log("INFO", "solve", "Solved: " .. filename)
+	notify.show("Solved: " .. filename, "DONE")
 end
 
+---撤销上一次 solve 操作，还原文件
 function M.solve_back()
 	if not M.config or not M.config.solve_dir then
-		log("solve_dir not configured.")
+		log("ERROR", "solve_back", "solve_dir not configured")
 		return
 	end
 
 	local solve_dir = M.config.solve_dir
+	local json_dir = M.config.json_dir
 	local history_path = solve_dir .. "/.history"
 
 	if vim.fn.filereadable(history_path) == 0 then
-		log("No history file.")
+		log("WARN", "solve_back", "No history file")
 		return
 	end
 
@@ -123,40 +148,41 @@ function M.solve_back()
 
 	while #lines > 0 do
 		local last = lines[#lines]
-
-		local f_name, f_path, j_name, j_path = last:match("^(.-)\t(.-)\t(.-)\t(.-)$")
+		-- 新格式: file_name \t file_raw_path \t problem_name \t problem_original_dir
+		local f_name, f_path, p_name, p_original_dir = last:match("^(.-)\t(.-)\t(.-)\t(.-)$")
 
 		if not f_name then
+			-- 兼容旧格式: file_name \t file_raw_path [\t json_name \t json_path]
 			f_name, f_path = last:match("^(.-)\t(.+)$")
-			j_name, j_path = "", ""
+			p_name, p_original_dir = "", ""
 		end
 
 		if not f_name or not f_path then
 			table.remove(lines)
 		else
 			local current_f_path = solve_dir .. "/" .. f_name
-			local current_j_path = (j_name ~= "") and (solve_dir .. "/" .. j_name) or nil
+			local current_p_dir = (p_name ~= "") and (solve_dir .. "/" .. p_name) or nil
 
 			if not utils.file_exists(current_f_path) then
 				table.remove(lines)
 			else
-				-- 1. 还原源码文件
+				-- 1. 还原源文件
 				local original_dir = vim.fn.fnamemodify(f_path, ":h")
 				ensure_dir(original_dir)
 				local ok, err = uv.fs_rename(current_f_path, f_path)
 				if not ok then
-					log("Restore source failed:", err)
+					log("ERROR", "solve_back", "Restore source failed: " .. (err or ""))
 					return
 				end
 
-				-- 2. 还原 JSON 文件 (如果有)
-				if current_j_path and utils.file_exists(current_j_path) then
-					local original_j_dir = vim.fn.fnamemodify(j_path, ":h")
-					ensure_dir(original_j_dir)
-					uv.fs_rename(current_j_path, j_path)
+				-- 2. 还原题目文件夹
+				if current_p_dir and vim.fn.isdirectory(current_p_dir) == 1 and p_original_dir ~= "" then
+					local original_p_dir = p_original_dir
+					ensure_dir(vim.fn.fnamemodify(original_p_dir, ":h"))
+					uv.fs_rename(current_p_dir, original_p_dir)
 				end
 
-				-- 3. 清理历史记录
+				-- 3. 清理历史
 				table.remove(lines)
 				if #lines == 0 then
 					uv.fs_unlink(history_path)
@@ -164,13 +190,13 @@ function M.solve_back()
 					write_lines(history_path, lines)
 				end
 
-				-- 4. 打开文件
 				if M.config.auto_open then
 					vim.cmd("edit " .. vim.fn.fnameescape(f_path))
 					vim.api.nvim_win_set_cursor(0, { 1, 0 })
 				end
 
-				log("Restored:", f_name)
+				log("INFO", "solve_back", "Restored: " .. f_name)
+				notify.show("Restored: " .. f_name, "DONE")
 				return
 			end
 		end
@@ -179,7 +205,7 @@ function M.solve_back()
 	if #lines == 0 and vim.fn.filereadable(history_path) == 1 then
 		uv.fs_unlink(history_path)
 	end
-	log("History empty.")
+	log("INFO", "solve_back", "History empty")
 end
 
 return M

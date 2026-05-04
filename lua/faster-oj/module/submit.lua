@@ -1,56 +1,73 @@
 ---@module "faster-oj.module.submit"
+
 local utils = require("faster-oj.module.utils")
+local notify = require("faster-oj.module.notify")
 local uv = vim.uv or vim.loop
 
 local M = {}
 
----@param cfg FOJ.Config 用户传入的配置
 function M.setup(cfg)
 	M.config = cfg
 	utils.setup(cfg)
 end
 
----@param ... any
-local function log(...)
+---@param level string
+---@param func string
+---@param msg string
+local function log(level, func, msg)
 	if M.config and M.config.debug then
-		print("[FOJ][submit]", ...)
+		print(string.format("[FOJ][submit][%s] %s: %s", level, func, msg))
 	end
 end
 
----核心提交逻辑：将数据写入 JSON 并发送广播
----@param ws table WebSocket 对象
----@param submit_data table 包含 language, code, url 的表
+---写入提交 JSON 并发送广播
+---@param ws table
+---@param submit_data table
 local function finalize_submission(ws, submit_data)
 	local temp_path = M.config.json_dir .. "/temp.json"
 
-	-- utils.write_json 内部应使用 vim.json.encode 以确保转义安全
+	if M.config.clipboard_submit and submit_data.code ~= "" then
+		vim.fn.setreg("+", submit_data.code)
+		log("INFO", "finalize_submission", "Code copied to clipboard")
+	end
+
 	if not utils.write_json(temp_path, submit_data) then
-		log("Failed to write temp.json")
+		log("ERROR", "finalize_submission", "Failed to write temp.json")
+		notify.show("Failed to create submission file", "ERROR")
 		return
 	end
 
-	log("Submit JSON generated:", temp_path)
+	log("INFO", "finalize_submission", "Submit JSON written: " .. temp_path)
 
 	ws.wait_for_connection(M.config.max_time_out, function()
 		ws.send("broadcast " .. temp_path)
-		-- utils.erase(temp_path)
+		notify.show("Submitted OK", "DONE")
 	end)
 end
 
-local function submit(submit_data, file_path, ws)
+---读取代码并提交 (原代码)
+local function submit_code(submit_data, file_path, ws)
 	submit_data.code = utils.read_file(file_path)
 	if not submit_data.code then
-		log("Failed to read current file:", file_path)
+		log("ERROR", "submit_code", "Failed to read file: " .. file_path)
+		notify.show("Failed to read file", "ERROR")
 		return
 	end
 	finalize_submission(ws, submit_data)
 end
 
----@param ws table WebSocket 对象
+---提交当前代码到 OJ 平台
 function M.submit(ws)
 	local file_path = utils.get_file_path()
 	if file_path == "" then
-		log("No active file")
+		log("WARN", "submit", "No active file")
+		notify.show("No active file", "WARN")
+		return
+	end
+
+	if not ws or not ws.send then
+		log("ERROR", "submit", "WebSocket not available")
+		notify.show("WebSocket server not running. Start with :FOJ start", "ERROR")
 		return
 	end
 
@@ -60,7 +77,8 @@ function M.submit(ws)
 	local origin = utils.read_json(json_path)
 
 	if not origin or not origin.url then
-		log("Missing url in problem json:", json_path)
+		log("ERROR", "submit", "Missing url in problem json: " .. json_path)
+		notify.show("No problem URL found", "WARN")
 		return
 	end
 
@@ -73,15 +91,17 @@ function M.submit(ws)
 	local cmd_cfg = M.config.code_obfuscator
 	local vars = utils.get_vars(file_path)
 
-	-- 检查是否需要执行代码混淆
-	local should_obscure = cmd_cfg and cmd_cfg.cmd and cmd_cfg.cmd.exec ~= "" and cmd_cfg.result ~= ""
+	local should_obscure = cmd_cfg
+		and cmd_cfg.cmd
+		and cmd_cfg.cmd.exec ~= ""
+		and cmd_cfg.result ~= ""
 
 	if should_obscure then
 		local exec = utils.expand(cmd_cfg.cmd.exec, vars)
 
 		if vim.fn.executable(exec) ~= 1 then
-			log(string.format("Obfuscator exec '%s' not found or not executable. Falling back to normal submit.", exec))
-			submit(submit_data, file_path, ws)
+			log("WARN", "submit", "Obfuscator not found: " .. exec .. " - falling back")
+			submit_code(submit_data, file_path, ws)
 			return
 		end
 
@@ -91,7 +111,8 @@ function M.submit(ws)
 			table.insert(args, utils.expand(a, vars))
 		end
 
-		log("Starting obfuscation...")
+		log("INFO", "submit", "Starting obfuscation via " .. exec)
+		local spin = notify.spinner_start("Obfuscating ...")
 
 		local stdout = uv.new_pipe(false)
 		local stderr = uv.new_pipe(false)
@@ -99,43 +120,46 @@ function M.submit(ws)
 		uv.spawn(
 			exec,
 			{ args = args, cwd = vars.DIR, hide = true, stdio = { nil, stdout, stderr } },
-			function(code, signal)
+			function(code)
 				stdout:read_stop()
 				stdout:close()
 				stderr:read_stop()
 				stderr:close()
+
 				if code ~= 0 then
-					log(string.format("Obfuscation failed (Exit code: %d, Signal: %d)", code, signal))
-					submit(submit_data, file_path, ws)
+					log("ERROR", "submit", string.format("Obfuscation failed (code=%d)", code))
+					notify.spinner_fail(spin, "Obfuscation failed, submitting original")
+					submit_code(submit_data, file_path, ws)
 					return
 				end
 
-				-- 混淆成功，读取生成后的代码
 				vim.schedule(function()
 					submit_data.code = utils.read_file(result_path)
 					if not submit_data.code then
-						log("Failed to read obscured file:", result_path)
-						submit(submit_data, file_path, ws)
+						log("ERROR", "submit", "Failed to read obfuscated file: " .. result_path)
+						notify.spinner_fail(spin, "Obfuscation failed")
+						submit_code(submit_data, file_path, ws)
 						return
 					end
+					notify.spinner_done(spin, "Obfuscated OK, submitting ...")
 					finalize_submission(ws, submit_data)
 				end)
 			end
 		)
 
-		stdout:read_start(function(err, data)
+		stdout:read_start(function(_, data)
 			if data then
-				log("[Obfuscator stdout]", data:gsub("\n$", ""))
+				log("INFO", "obfuscator:stdout", data:gsub("\n$", ""))
 			end
 		end)
 
-		stderr:read_start(function(err, data)
+		stderr:read_start(function(_, data)
 			if data then
-				log("[Obfuscator stderr] ERROR:", data:gsub("\n$", ""))
+				log("WARN", "obfuscator:stderr", data:gsub("\n$", ""))
 			end
 		end)
 	else
-		submit(submit_data, file_path, ws)
+		submit_code(submit_data, file_path, ws)
 	end
 end
 

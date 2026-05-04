@@ -6,6 +6,7 @@
 ---@field max_time_out integer 浏览器连接最大时间
 ---@field debug boolean 是否开启调试模式
 ---@field server_mod '"http"'|'"ws"'|'"all"' 服务器启动模式
+---@field temp_dir string 临时文件目录
 ---@field work_dir string 工作目录
 ---@field json_dir string 题目数据存储目录
 ---@field solve_dir string 已解决问题存储目录
@@ -18,9 +19,14 @@
 ---@field code_obfuscator table 代码混淆器 —— 仅当混淆器可运行且读取到混淆结果时自动混淆 [慎用 - 不保证oj平台允许该行为]
 ---@field obscure boolean 是否启用模糊匹配 —— 词法模式 / 逐行模式
 ---@field warning_msg boolean 判题时是否输出警告信息
+---@field clipboard_submit boolean 提交时是否将代码复制到系统剪切板
 ---@field max_workers integer 最大并发测题数量
+---@field max_solve_history integer 最大解题历史条目数
+---@field default_time_limit integer 缺省时间限制 (ms)
+---@field default_memory_limit integer 缺省内存限制 (MB)
 ---@field tc_ui FOJ.TCUIConfig UI 布局配置
 ---@field tc_edit_ui FOJ.TCManageUIConfig UI 布局配置
+---@field stress_ui FOJ.TCUIConfig 对拍 UI 布局配置
 ---@field highlights FOJ.HighlightConfig 高亮颜色配置
 ---@field compile_command table<string, FOJ.Command> 编译命令表
 ---@field run_command table<string, FOJ.Command> 运行命令表
@@ -64,12 +70,12 @@ M.config = {
 	ws_port = 10044,
 
 	max_time_out = 5,
-	-- max_erase_history = 10,
 
 	debug = false, -- Debug mode
 	server_mod = "all", -- "http" | "ws" | "all"
 
 	work_dir = "", -- Work directory
+	temp_dir = ".temp", -- Temporary files directory (stress data, submit temp, etc.)
 	json_dir = ".problem", -- Problem data directory
 	solve_dir = ".solve", -- Solve Problem data directory
 	template_dir = "", -- Template data directory
@@ -83,7 +89,12 @@ M.config = {
 	obscure = true, -- Enable fuzzy matching
 
 	warning_msg = false, -- Show warnings while judging
+	clipboard_submit = false, -- Copy code to clipboard on submit
 	max_workers = 5, -- Max parallel judging workers
+	max_solve_history = 100, -- Max solve history entries
+
+	default_time_limit = 2000, -- Default time limit (ms)
+	default_memory_limit = 256, -- Default memory limit (MB)
 
 	tc_ui = {
 		width = 0.9,
@@ -129,6 +140,24 @@ M.config = {
 		},
 	},
 
+	stress_ui = {
+		width = 0.9,
+		height = 0.9,
+		layout = {
+			{ 4, "tc" },
+			{ 5, { { 1, "si" }, { 1, "so" } } },
+			{ 5, { { 1, "info" }, { 1, "eo" } } },
+		},
+		mappings = {
+			close = { "<esc>", "<C-c>", "q", "Q" },
+			view = { "a", "i", "o", "O" },
+			view_focus_next = { "<Tab>" },
+			view_focus_prev = { "<S-Tab>" },
+			focus_next = { "j", "<down>", "<Tab>" },
+			focus_prev = { "k", "<up>", "<S-Tab>" },
+		},
+	},
+
 	highlights = {
 		windows = {
 			Header = "#c0c0c0",
@@ -158,11 +187,13 @@ M.config = {
 		c = {
 			exec = "gcc",
 			args = {
+				"-std=c11",
 				"-O2",
 				"-Wall",
+				"-DONLINE_JUDGE",
 				"$(FABSPATH)",
 				"-o",
-				"$(DIR)/$(FNOEXT)",
+				"$(DIR)/.output/$(FNOEXT)",
 			},
 		},
 
@@ -170,22 +201,25 @@ M.config = {
 		cpp = {
 			exec = "g++",
 			args = {
+				"-std=c++20",
 				"-O2",
 				"-Wall",
+				"-DONLINE_JUDGE",
 				"$(FABSPATH)",
 				"-o",
-				"$(DIR)/$(FNOEXT)",
+				"$(DIR)/.output/$(FNOEXT)",
 			},
 		},
 
 		-- Rust
-		rust = {
+		rs = {
 			exec = "rustc",
 			args = {
-				"-O",
+				"-C",
+				"opt-level=3",
 				"$(FABSPATH)",
 				"-o",
-				"$(DIR)/$(FNOEXT)",
+				"$(DIR)/.output/$(FNOEXT)",
 			},
 		},
 
@@ -194,8 +228,9 @@ M.config = {
 			exec = "go",
 			args = {
 				"build",
+				"-ldflags=-s -w",
 				"-o",
-				"$(DIR)/$(FNOEXT)",
+				"$(DIR)/.output/$(FNOEXT)",
 				"$(FABSPATH)",
 			},
 		},
@@ -206,18 +241,20 @@ M.config = {
 			args = {
 				"-encoding",
 				"UTF-8",
+				"-d",
+				"$(DIR)/.output",
 				"$(FABSPATH)",
 			},
 		},
 
 		-- Kotlin
-		kotlin = {
+		kt = {
 			exec = "kotlinc",
 			args = {
 				"$(FABSPATH)",
 				"-include-runtime",
 				"-d",
-				"$(DIR)/$(FNOEXT).jar",
+				"$(DIR)/.output/$(FNOEXT).jar",
 			},
 		},
 
@@ -226,17 +263,17 @@ M.config = {
 			exec = "mcs",
 			args = {
 				"$(FABSPATH)",
-				"-out:$(DIR)/$(FNOEXT).exe",
+				"-out:$(DIR)/.output/$(FNOEXT).exe",
 			},
 		},
 
 		-- Pascal
-		pascal = {
+		pas = {
 			exec = "fpc",
 			args = {
 				"$(FABSPATH)",
-				"-O2",
-				"-o$(DIR)/$(FNOEXT)",
+				"-O3",
+				"-o$(DIR)/.output/$(FNOEXT)",
 			},
 		},
 
@@ -245,9 +282,9 @@ M.config = {
 			exec = "swiftc",
 			args = {
 				"$(FABSPATH)",
-				"-O",
+				"-Ounchecked",
 				"-o",
-				"$(DIR)/$(FNOEXT)",
+				"$(DIR)/.output/$(FNOEXT)",
 			},
 		},
 
@@ -259,7 +296,7 @@ M.config = {
 				"$(FABSPATH)",
 				"-O",
 				"ReleaseFast",
-				"-femit-bin=$(DIR)/$(FNOEXT)",
+				"-femit-bin=$(DIR)/.output/$(FNOEXT)",
 			},
 		},
 	},
@@ -267,40 +304,40 @@ M.config = {
 	run_command = {
 
 		-- Native compiled
-		c = { exec = "$(DIR)/$(FNOEXT)" },
-		cpp = { exec = "$(DIR)/$(FNOEXT)" },
-		rust = { exec = "$(DIR)/$(FNOEXT)" },
-		go = { exec = "$(DIR)/$(FNOEXT)" },
-		swift = { exec = "$(DIR)/$(FNOEXT)" },
-		zig = { exec = "$(DIR)/$(FNOEXT)" },
-		pascal = { exec = "$(DIR)/$(FNOEXT)" },
+		c = { exec = "$(DIR)/.output/$(FNOEXT)" },
+		cpp = { exec = "$(DIR)/.output/$(FNOEXT)" },
+		rs = { exec = "$(DIR)/.output/$(FNOEXT)" },
+		go = { exec = "$(DIR)/.output/$(FNOEXT)" },
+		swift = { exec = "$(DIR)/.output/$(FNOEXT)" },
+		zig = { exec = "$(DIR)/.output/$(FNOEXT)" },
+		pas = { exec = "$(DIR)/.output/$(FNOEXT)" },
 
 		-- Java
 		java = {
 			exec = "java",
-			args = { "-cp", "$(DIR)", "$(FNOEXT)" },
+			args = { "-cp", "$(DIR)/.output", "$(FNOEXT)" },
 		},
 
 		-- Kotlin
-		kotlin = {
+		kt = {
 			exec = "java",
-			args = { "-jar", "$(DIR)/$(FNOEXT).jar" },
+			args = { "-jar", "$(DIR)/.output/$(FNOEXT).jar" },
 		},
 
 		-- Python
-		python = {
+		py = {
 			exec = "python3",
 			args = { "$(FABSPATH)" },
 		},
 
 		-- NodeJS
-		javascript = {
+		js = {
 			exec = "node",
 			args = { "$(FABSPATH)" },
 		},
 
 		-- TypeScript (requires ts-node)
-		typescript = {
+		ts = {
 			exec = "ts-node",
 			args = { "$(FABSPATH)" },
 		},
@@ -314,7 +351,7 @@ M.config = {
 		-- C#
 		cs = {
 			exec = "mono",
-			args = { "$(DIR)/$(FNOEXT).exe" },
+			args = { "$(DIR)/.output/$(FNOEXT).exe" },
 		},
 	},
 }

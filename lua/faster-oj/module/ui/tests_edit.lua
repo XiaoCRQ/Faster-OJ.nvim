@@ -1,4 +1,5 @@
----@module "faster-oj.module.tests_edit_ui"
+---@module "faster-oj.module.ui.tests_edit"
+
 local utils = require("faster-oj.module.utils")
 local ui = require("faster-oj.module.ui")
 
@@ -12,17 +13,24 @@ local WIN_OPTS = {
 	so = { number = true },
 }
 
--- 编辑窗口循环顺序
 local EDIT_CYCLE = { "si", "so" }
 
 M.state = {
-	json = nil,
-	json_file_path = "",
+	problem_dir = "",
+	test_count = 0,
 	current_index = 1,
-	is_updating = false, -- 锁：防止程序写入Buffer时触发内容同步回调
+	is_updating = false,
 }
 
----初始化配置
+---@param level string
+---@param func string
+---@param msg string
+local function log(level, func, msg)
+	if M.config and M.config.debug then
+		print(string.format("[FOJ][edit_ui][%s] %s: %s", level, func, msg))
+	end
+end
+
 function M.setup(cfg)
 	M.config = cfg or {}
 end
@@ -34,84 +42,102 @@ local function set_buf_content(key, lines)
 		return
 	end
 	local buf = inst.bufs[key]
-
 	M.state.is_updating = true
 	vim.bo[buf].modifiable = true
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines or {})
-	-- 列表窗口设为不可编辑
 	if key == "tc" then
 		vim.bo[buf].modifiable = false
 	end
 	M.state.is_updating = false
 end
 
----刷新左侧 TC 列表
+---刷新 TC 列表
 local function update_tc_list()
-	if not M.state.json or not M.state.json.tests then
-		return
-	end
 	local lines = {}
-	for i = 1, #M.state.json.tests do
+	for i = 1, M.state.test_count do
 		table.insert(lines, "  TC " .. i - 1)
 	end
 	set_buf_content("tc", lines)
 end
 
----刷新右侧编辑详情
-local function update_details(index)
-	if not M.state.json or not M.state.json.tests[index] then
+---保存当前编辑缓冲区到文件
+local function flush_current_to_file()
+	if M.state.current_index < 1 or M.state.current_index > M.state.test_count then
 		return
 	end
-	M.state.current_index = index
-	local tc = M.state.json.tests[index]
+	local inst = ui.instances[GROUP]
+	local file_idx = M.state.current_index - 1
 
-	-- 移除结尾多余换行防止 Buffer 多出一行，同步时会补齐
-	local in_lines = vim.split(string.gsub(tc.input or "", "\n$", ""), "\n")
-	local out_lines = vim.split(string.gsub(tc.output or "", "\n$", ""), "\n")
-
-	set_buf_content("si", in_lines)
-	set_buf_content("so", out_lines)
+	if inst and inst.bufs["si"] and vim.api.nvim_buf_is_valid(inst.bufs["si"]) then
+		local lines = vim.api.nvim_buf_get_lines(inst.bufs["si"], 0, -1, false)
+		local content = table.concat(lines, "\n")
+		utils.write_file(M.state.problem_dir .. file_idx .. ".in", content)
+	end
+	if inst and inst.bufs["so"] and vim.api.nvim_buf_is_valid(inst.bufs["so"]) then
+		local lines = vim.api.nvim_buf_get_lines(inst.bufs["so"], 0, -1, false)
+		local content = table.concat(lines, "\n")
+		utils.write_file(M.state.problem_dir .. file_idx .. ".out", content)
+	end
 end
 
----实时同步 Buffer 内容到内存 JSON 对象
+---加载测试用例到缓冲区
+local function update_details(index)
+	if index < 1 or index > M.state.test_count then
+		return
+	end
+
+	-- 保存当前缓冲区
+	if index ~= M.state.current_index then
+		flush_current_to_file()
+	end
+
+	M.state.current_index = index
+	local file_idx = index - 1
+
+	local in_content = utils.read_file(M.state.problem_dir .. file_idx .. ".in") or ""
+	local out_content = utils.read_file(M.state.problem_dir .. file_idx .. ".out") or ""
+
+	set_buf_content("si", vim.split(in_content:gsub("\n$", ""), "\n"))
+	set_buf_content("so", vim.split(out_content:gsub("\n$", ""), "\n"))
+end
+
+---实时同步 Buffer 到文件 (TextChanged)
 local function setup_sync_logic()
 	local inst = ui.instances[GROUP]
-	local sync_map = { si = "input", so = "output" }
+	local sync_map = { si = "in", so = "out" }
 
-	for buf_key, json_key in pairs(sync_map) do
+	for buf_key, ext in pairs(sync_map) do
 		local buf = inst.bufs[buf_key]
 		if buf then
 			vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
 				buffer = buf,
 				callback = function()
-					if M.state.is_updating or not M.state.json then
+					if M.state.is_updating or M.state.current_index < 1 then
 						return
 					end
+					local file_idx = M.state.current_index - 1
 					local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 					local content = table.concat(lines, "\n")
-					if content ~= "" then
-						content = content .. "\n"
-					end
-					M.state.json.tests[M.state.current_index][json_key] = content
+					utils.write_file(M.state.problem_dir .. file_idx .. "." .. ext, content)
 				end,
 			})
 		end
 	end
 end
 
----保存数据到文件
+---保存并更新 testCount
 function M.save()
-	if M.state.json and M.state.json_file_path ~= "" then
-		utils.write_json(M.state.json_file_path, M.state.json)
-		vim.notify("[FOJ] Saved to " .. vim.fn.fnamemodify(M.state.json_file_path, ":t"), vim.log.levels.INFO)
-		-- 保存后清除所有相关 buffer 的修改状态，防止退出时提示
-		local inst = ui.instances[GROUP]
-		if inst then
-			for _, buf in pairs(inst.bufs) do
-				vim.bo[buf].modified = false
-			end
+	flush_current_to_file()
+	utils.update_test_count(M.state.problem_dir, M.state.test_count)
+
+	local inst = ui.instances[GROUP]
+	if inst then
+		for _, buf in pairs(inst.bufs) do
+			vim.bo[buf].modified = false
 		end
 	end
+	vim.notify("[FOJ] Saved", vim.log.levels.INFO)
+	log("INFO", "save", "Saved to " .. M.state.problem_dir)
 end
 
 ---绑定按键映射
@@ -122,18 +148,14 @@ local function bind_keys()
 	for key, buf in pairs(inst.bufs) do
 		local opts = { buffer = buf, nowait = true, silent = true }
 
-		-- 全局写入映射 (w)
 		for _, k in ipairs(maps.write) do
 			vim.keymap.set("n", k, M.save, opts)
 		end
 
 		if key == "tc" then
-			-- TC 列表窗口映射
 			for _, k in ipairs(maps.close) do
 				vim.keymap.set("n", k, M.close, opts)
 			end
-
-			-- 进入编辑 (e/i)
 			for _, k in ipairs(maps.edit) do
 				vim.keymap.set("n", k, function()
 					local win = ui.get_win_by_key(GROUP, "si")
@@ -142,12 +164,10 @@ local function bind_keys()
 					end
 				end, opts)
 			end
-
-			-- 列表导航 (j/k)
 			for _, k in ipairs(maps.focus_next) do
 				vim.keymap.set("n", k, function()
 					local r = vim.api.nvim_win_get_cursor(0)[1]
-					if r < #M.state.json.tests then
+					if r < M.state.test_count then
 						vim.api.nvim_win_set_cursor(0, { r + 1, 2 })
 					end
 				end, opts)
@@ -160,34 +180,36 @@ local function bind_keys()
 					end
 				end, opts)
 			end
-
-			-- 增加 (a)
+			-- 新增测试用例
 			for _, k in ipairs(maps.add) do
 				vim.keymap.set("n", k, function()
-					table.insert(M.state.json.tests, { input = "", output = "" })
+					local new_idx = M.state.test_count
+					utils.write_file(M.state.problem_dir .. new_idx .. ".in", "")
+					utils.write_file(M.state.problem_dir .. new_idx .. ".out", "")
+					M.state.test_count = M.state.test_count + 1
 					update_tc_list()
-					vim.api.nvim_win_set_cursor(0, { #M.state.json.tests, 2 })
+					vim.api.nvim_win_set_cursor(0, { M.state.test_count, 2 })
 				end, opts)
 			end
-
-			-- 删除 (d)
+			-- 删除测试用例
 			for _, k in ipairs(maps.erase) do
 				vim.keymap.set("n", k, function()
 					local idx = vim.api.nvim_win_get_cursor(0)[1]
+					if M.state.test_count <= 1 then
+						return -- 至少保留一个
+					end
 					if vim.fn.confirm("Delete TC " .. idx - 1 .. "?", "&Yes\n&No", 2) == 1 then
-						table.remove(M.state.json.tests, idx)
-						if #M.state.json.tests == 0 then
-							table.insert(M.state.json.tests, { input = "", output = "" })
-						end
+						flush_current_to_file()
+						utils.delete_test_case(M.state.problem_dir, idx - 1, M.state.test_count)
+						M.state.test_count = M.state.test_count - 1
 						update_tc_list()
-						local new_r = math.min(idx, #M.state.json.tests)
+						local new_r = math.min(idx, M.state.test_count)
 						vim.api.nvim_win_set_cursor(0, { new_r, 2 })
 						update_details(new_r)
 					end
 				end, opts)
 			end
 		else
-			-- 编辑区 (si/so) 窗口映射
 			for _, k in ipairs(maps.close) do
 				vim.keymap.set("n", k, function()
 					local win = ui.get_win_by_key(GROUP, "tc")
@@ -197,8 +219,6 @@ local function bind_keys()
 					end
 				end, opts)
 			end
-
-			-- 编辑窗切换 (Tab)
 			local function jump(step)
 				local curr_idx = 1
 				for i, v in ipairs(EDIT_CYCLE) do
@@ -227,53 +247,56 @@ local function bind_keys()
 	end
 end
 
----异步打开管理界面
 function M.edit()
 	vim.schedule(function()
 		if ui.is_open(GROUP) then
 			return
 		end
 
-		local json = utils.get_json_file()
-		if not json then
-			-- 如果不存在，询问创建 (此处简化处理，假设 utils 处理了创建逻辑或调用 creat)
-			if vim.fn.confirm("Data not found. Create new?", "&Yes\n&No", 2) == 1 then
-				json = { tests = { { input = "", output = "" } } }
-				-- utils.write_json(utils.get_json_path(), json)
+		local problem_dir = utils.get_problem_dir()
+		if problem_dir == "" or not utils.dir_exists(problem_dir) then
+			if vim.fn.confirm("Problem data not found. Create new?", "&Yes\n&No", 2) == 1 then
+				utils.ensure_dir(problem_dir)
+				-- 创建最小 problem.json
+				utils.write_json(problem_dir .. "problem.json", {
+					url = "",
+					name = vim.fn.fnamemodify(utils.get_file_path(), ":t:r"),
+					testCount = 1,
+					memoryLimit = 256,
+					timeLimit = 2000,
+				})
+				utils.write_file(problem_dir .. "0.in", "")
+				utils.write_file(problem_dir .. "0.out", "")
 			else
 				return
 			end
 		end
 
-		M.state.json = json
-		M.state.json_file_path = utils.get_json_path()
+		local test_count = utils.get_test_count(problem_dir)
+
+		M.state.problem_dir = problem_dir
+		M.state.test_count = math.max(test_count, 1)
 		M.state.current_index = 1
 
 		ui.open(GROUP, M.config.tc_edit_ui, TITLES, WIN_OPTS, function()
 			local inst = ui.instances[GROUP]
 			local tc_buf = inst.bufs.tc
 
-			-- === 核心修复：处理命令行指令 (:q 和 :w) ===
+			-- :q 关闭处理
 			for _, buf in pairs(inst.bufs) do
-				-- 1. 处理 :q (只要有一个窗口离开，就关闭整组)
 				vim.api.nvim_create_autocmd("BufWinLeave", {
 					buffer = buf,
 					callback = function()
 						vim.schedule(function()
 							if M.is_open() then
+								-- 关闭前保存
+								flush_current_to_file()
+								utils.update_test_count(M.state.problem_dir, M.state.test_count)
 								M.close()
 							end
 						end)
 					end,
 				})
-
-				-- 2. 处理 :w (劫持写入指令) (暂定修改)
-				-- vim.api.nvim_create_autocmd("BufWriteCmd", {
-				-- 	buffer = buf,
-				-- 	callback = function()
-				-- 		M.save()
-				-- 	end,
-				-- })
 			end
 
 			update_tc_list()
@@ -281,12 +304,11 @@ function M.edit()
 			bind_keys()
 			setup_sync_logic()
 
-			-- 列表光标移动监听
 			vim.api.nvim_create_autocmd("CursorMoved", {
 				buffer = tc_buf,
 				callback = function()
 					local cursor = vim.api.nvim_win_get_cursor(0)
-					local r = cursor[1] -- 管理界面无 Headline，从 1 开始
+					local r = cursor[1]
 					if cursor[2] ~= 5 then
 						vim.api.nvim_win_set_cursor(0, { r, 5 })
 					end

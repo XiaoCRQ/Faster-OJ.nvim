@@ -1,140 +1,139 @@
 ---@module "faster-oj.server.http.handler"
 
+local notify = require("faster-oj.module.notify")
+
 local M = {}
 
---- 白名单 JSON 字段
-M.allowed_keys = {
-	"url",
-	"tests",
-	"memoryLimit",
-	"timeLimit",
-}
-
----@private
-local function log(...)
-	if M.config.debug then
-		print("[FOJ][http]", ...)
+---@param level string
+---@param func string
+---@param msg string
+local function log(level, func, msg)
+	if M.config and M.config.debug then
+		print(string.format("[FOJ][http][%s] %s: %s", level, func, msg))
 	end
 end
 
----@private
----@param json table 原始 JSON 数据
----@param allowed_keys string[] 白名单字段
----@return table 过滤后的 JSON
-local function filter_json(json, allowed_keys)
-	local filtered = {}
-
-	local key_set = {}
-	for _, k in ipairs(allowed_keys) do
-		key_set[k] = true
+---写入纯文本文件
+---@param path string
+---@param content string
+local function write_text_file(path, content)
+	local f = io.open(path, "w")
+	if not f then
+		return false
 	end
-
-	for k, v in pairs(json) do
-		if key_set[k] then
-			filtered[k] = v
-		end
-	end
-
-	return filtered
+	f:write(content)
+	f:close()
+	return true
 end
 
----@param json table 原始 JSON 请求数据
----   json.name string 题目名称（必填，用作文件名）
----   json.url string 题目 URL
----   json.tests table 测试用例列表
----   json.memoryLimit integer 内存限制
----   json.timeLimit integer 时间限制
----@param cfg table 配置
----   cfg.json_dir string 存放题目 JSON 的目录
----   cfg.work_dir string 存放代码文件的工作目录
----   cfg.template_default string 默认模板路径（可选）
----   cfg.template_default_ext string 默认模板扩展名（可选）
----   cfg.debug boolean 是否打印调试信息
+---处理来自浏览器插件的题目数据
+---存储格式:
+---   json_dir/
+---   └── ProblemName/
+---       ├── problem.json   {url, name, testCount, memoryLimit, timeLimit}
+---       ├── 0.in / 0.out
+---       ├── 1.in / 1.out
+---       └── ...
+---@param json table 原始 JSON (含 name, url, tests, memoryLimit, timeLimit)
+---@param cfg table 插件配置
 function M.handle(json, cfg)
 	M.config = cfg
 	local json_dir = M.config.json_dir
 
 	if not json_dir or json_dir == "" then
-		log("Error: json_dir not specified in cfg")
+		log("ERROR", "handle", "json_dir not configured")
 		return
 	end
 
-	os.execute('mkdir -p "' .. json_dir .. '"')
+	vim.fn.mkdir(json_dir, "p")
 
 	if not json.name then
-		log("Error: json.name is missing")
+		log("ERROR", "handle", "Missing json.name")
 		return
 	end
 
-	local filtered_json = filter_json(json, M.allowed_keys)
-	local file_path = json_dir .. "/" .. json.name .. ".json"
+	local tests = json.tests or {}
+	local problem_dir = json_dir .. "/" .. json.name
+	vim.fn.mkdir(problem_dir, "p")
 
-	local ok, json_str = pcall(vim.fn.json_encode, filtered_json)
+	-- 写入 problem.json
+	local problem_json = {
+		url = json.url or "",
+		name = json.name,
+		testCount = #tests,
+		memoryLimit = json.memoryLimit or 256,
+		timeLimit = json.timeLimit or 2000,
+	}
+
+	local ok, json_str = pcall(vim.fn.json_encode, problem_json)
 	if not ok then
-		log("Error encoding JSON:", json_str)
+		log("ERROR", "handle", "JSON encode failed: " .. tostring(json_str))
 		return
 	end
 
-	local f, err = io.open(file_path, "w")
-	if not f then
-		log("Error opening file:", file_path, err)
-		return
-	end
-	f:write(json_str)
-	f:close()
-	log("Saved", file_path)
+	write_text_file(problem_dir .. "/problem.json", json_str)
+	log("INFO", "handle", "Saved " .. problem_dir .. "/problem.json")
 
+	-- 写入测试用例文件 (0.in, 0.out, 1.in, 1.out, ...)
+	for i, tc in ipairs(tests) do
+		local idx = i - 1 -- 0-based file index
+		write_text_file(problem_dir .. "/" .. idx .. ".in", tc.input or "")
+		write_text_file(problem_dir .. "/" .. idx .. ".out", tc.output or "")
+	end
+	log("INFO", "handle", string.format("Wrote %d test case(s)", #tests))
+
+	vim.schedule(function()
+		notify.show("Problem received: " .. json.name, "INFO", 3000)
+	end)
+
+	-- 处理模板文件
 	local ext = nil
 	local content = ""
 
-	-- 如果存在默认模板
 	if M.config.template_default and M.config.template_default ~= "" then
 		local template_file = M.config.template_default
 		local tf = io.open(template_file, "r")
-
 		if tf then
 			content = tf:read("*a")
 			tf:close()
 			ext = template_file:match("^.+(%..+)$") or M.config.template_default_ext
 		else
-			log("Warning: template_default file not found:", template_file)
+			log("WARN", "handle", "Template file not found: " .. template_file)
 		end
 	end
 
-	-- 没模板时使用默认扩展名
 	if ext == nil then
 		ext = M.config.template_default_ext
 	end
 
-	os.execute('mkdir -p "' .. M.config.work_dir .. '"')
+	vim.fn.mkdir(M.config.work_dir, "p")
 	local target_file = M.config.work_dir .. "/" .. json.name .. ext
 
 	local should_write = true
 	if vim.fn.filereadable(target_file) == 1 then
 		local choice = vim.fn.confirm('"' .. json.name .. '" already exists. Overwrite?', "&Yes\n&No", 2)
 		if choice ~= 1 then
-			log("Skipped writing file:", target_file)
+			log("INFO", "handle", "Skipped overwriting: " .. target_file)
 			should_write = false
 		end
 	end
 
 	if should_write then
-		local tf_out, err_out = io.open(target_file, "w")
-		if not tf_out then
-			log("Error opening target file:", target_file, err_out)
-			return
+		local tf_out = io.open(target_file, "w")
+		if tf_out then
+			tf_out:write(content)
+			tf_out:close()
+			log("INFO", "handle", "File written: " .. target_file)
+		else
+			log("ERROR", "handle", "Cannot open target file: " .. target_file)
 		end
-
-		tf_out:write(content) -- 这里关键：无模板就是空字符串
-		tf_out:close()
-
-		log("File written to", target_file)
 	end
 
 	if M.config.auto_open then
-		vim.cmd("edit " .. vim.fn.fnameescape(target_file))
-		vim.api.nvim_win_set_cursor(0, { 1, 0 })
-		-- print("[FOJ] " .. json.name)
+		vim.schedule(function()
+			vim.cmd("edit " .. vim.fn.fnameescape(target_file))
+			vim.api.nvim_win_set_cursor(0, { 1, 0 })
+		end)
 	end
 end
 

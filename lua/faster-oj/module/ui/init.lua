@@ -1,15 +1,16 @@
 ---@module "faster-oj.module.ui"
+
 local M = {}
 
--- 存储所有组的状态
 M.instances = {}
 
----获取或初始化组状态
+---@param group string
+---@return table inst
 local function get_inst(group)
 	if not M.instances[group] then
 		M.instances[group] = {
-			wins = {}, -- key -> win_id
-			bufs = {}, -- key -> buf_id
+			wins = {},
+			bufs = {},
 			augroup = nil,
 			last_args = nil,
 		}
@@ -17,13 +18,15 @@ local function get_inst(group)
 	return M.instances[group]
 end
 
----格式化布局配置
+---格式化布局配置为统一的 {weight, content} 节点列表
+---@param raw_layout table
+---@return table[]
 local function normalize_layout(raw_layout)
 	if type(raw_layout) ~= "table" then
 		return {}
 	end
 
-	-- 情况 A: 兼容单节点写法 {weight, content}
+	-- 单个节点: {weight, content}
 	if type(raw_layout[1]) == "number" and (type(raw_layout[2]) == "string" or type(raw_layout[2]) == "table") then
 		raw_layout = { raw_layout }
 	end
@@ -33,7 +36,7 @@ local function normalize_layout(raw_layout)
 		if type(item) == "table" then
 			local weight = item[1] or 1
 			local content = item[2]
-			-- 情况 B: 兼容平铺式嵌套 {weight, {w1, c1}, {w2, c2}}
+			-- 平铺式嵌套: {weight, {w1, c1}, {w2, c2}} -> {weight, {{w1,c1},{w2,c2}}}
 			if type(content) == "table" and type(content[1]) == "number" then
 				content = {}
 				for i = 2, #item do
@@ -46,8 +49,8 @@ local function normalize_layout(raw_layout)
 	return normalized
 end
 
----递归计算布局坐标 (不执行 UI 操作)
----@return table[] 包含所有待渲染窗口的 rect 列表
+---递归计算布局坐标
+---@return table[] rects
 local function calculate_rects(layout, area, rects)
 	rects = rects or {}
 	local nodes = normalize_layout(layout)
@@ -82,7 +85,12 @@ local function calculate_rects(layout, area, rects)
 	return rects
 end
 
----显示 UI
+---打开或重绘浮动窗口组
+---@param group string
+---@param config table { width, height, layout }
+---@param titles table<string,string>
+---@param win_opts table<string,table>
+---@param on_win_created fun()?
 function M.open(group, config, titles, win_opts, on_win_created)
 	local inst = get_inst(group)
 	inst.last_args = { config = config, titles = titles, win_opts = win_opts, on_created = on_win_created }
@@ -114,14 +122,13 @@ function M.open(group, config, titles, win_opts, on_win_created)
 			local key, area = item.key, item.area
 			active_keys[key] = true
 
-			-- 初始化或获取 Buffer
 			if not inst.bufs[key] or not vim.api.nvim_buf_is_valid(inst.bufs[key]) then
 				inst.bufs[key] = vim.api.nvim_create_buf(false, true)
 			end
 			local buf = inst.bufs[key]
 			local opt = opts_map[key] or {}
 
-			-- 考虑 border 占用的空间 (rounded 为上下左右各占1)
+			-- 考虑 rounded border 占用的 2 行/列
 			local win_w = math.max(area.width - 2, 1)
 			local win_h = math.max(area.height - 2, 1)
 
@@ -139,17 +146,16 @@ function M.open(group, config, titles, win_opts, on_win_created)
 			}
 
 			if inst.wins[key] and vim.api.nvim_win_is_valid(inst.wins[key]) then
-				-- 核心优化：如果窗口已存在，仅更新位置和尺寸，避免闪烁
+				-- 窗口已存在：仅更新位置/尺寸，避免闪烁
 				vim.api.nvim_win_set_config(inst.wins[key], win_config)
 			else
-				-- 创建新窗口
 				local win = vim.api.nvim_open_win(buf, opt.focus or false, win_config)
 				vim.wo[win].number = opt.number or false
 				inst.wins[key] = win
 			end
 		end
 
-		-- 清理本次布局中不再需要的窗口
+		-- 清理已不在布局中的旧窗口
 		for key, win in pairs(inst.wins) do
 			if not active_keys[key] then
 				if vim.api.nvim_win_is_valid(win) then
@@ -166,7 +172,7 @@ function M.open(group, config, titles, win_opts, on_win_created)
 	end)
 end
 
----关闭特定组的窗口
+---@param group string
 function M.close(group)
 	local inst = M.instances[group]
 	if not inst then
@@ -180,14 +186,13 @@ function M.close(group)
 	end
 end
 
----清理所有资源
+---@param group string
 function M.clear(group)
 	M.close(group)
 	local inst = M.instances[group]
 	if not inst then
 		return
 	end
-
 	for _, buf in pairs(inst.bufs) do
 		if vim.api.nvim_buf_is_valid(buf) then
 			pcall(vim.api.nvim_buf_delete, buf, { force = true })
@@ -199,7 +204,8 @@ function M.clear(group)
 	M.instances[group] = nil
 end
 
----检查组是否处于打开状态
+---@param group string
+---@return boolean
 function M.is_open(group)
 	local inst = M.instances[group]
 	if not inst then
@@ -213,7 +219,8 @@ function M.is_open(group)
 	return false
 end
 
----重绘监听：使用逻辑优化的 open 函数实现平滑重绘
+---注册 VimResized 自动重绘
+---@param group string
 function M.setup_resize(group)
 	local inst = get_inst(group)
 	if inst.augroup then
@@ -226,13 +233,15 @@ function M.setup_resize(group)
 		callback = function()
 			if M.is_open(group) and inst.last_args then
 				local a = inst.last_args
-				-- 注意：直接调用 open，内部的 nvim_win_set_config 会处理平滑移动
 				M.open(group, a.config, a.titles, a.win_opts, a.on_created)
 			end
 		end,
 	})
 end
 
+---@param group string
+---@param key string
+---@return integer|nil win_id
 function M.get_win_by_key(group, key)
 	local inst = M.instances[group]
 	if not inst or not inst.wins then

@@ -4,20 +4,18 @@ local uv = vim.uv or vim.loop
 local handler = require("faster-oj.server.http.handler")
 local M = {}
 
----@private
-local server = nil -- uv_tcp 服务器实例
----@private
-local clients = {} -- uv_tcp 客户端列表
+local server = nil
+local clients = {}
 
----@private
-local function log(...)
-	if M.config.debug then
-		print("[FOJ][http]", ...)
+---@param level string
+---@param func string
+---@param msg string
+local function log(level, func, msg)
+	if M.config and M.config.debug then
+		print(string.format("[FOJ][http][%s] %s: %s", level, func, msg))
 	end
 end
 
----@private
----@param c uv_tcp 客户端句柄
 local function remove_client(c)
 	for i, v in ipairs(clients) do
 		if v == c then
@@ -27,22 +25,18 @@ local function remove_client(c)
 	end
 end
 
----@param cfg table 配置表
----   cfg.http_host string HTTP 监听地址
----   cfg.http_port integer HTTP 监听端口
----   cfg.debug boolean 是否打印调试日志
 function M.setup(cfg)
 	M.config = cfg or {}
 end
 
----@return boolean 是否服务器正在运行
+---@return boolean
 function M.is_open()
 	return server ~= nil
 end
 
 function M.start()
 	if M.is_open() then
-		log("HTTP server already running")
+		log("WARN", "start", "Already running")
 		return
 	end
 
@@ -54,7 +48,7 @@ function M.start()
 
 	server:listen(128, function(err)
 		if err then
-			log("Listen error:", err)
+			log("ERROR", "listen", err)
 			return
 		end
 
@@ -64,9 +58,9 @@ function M.start()
 
 		local buffer = ""
 
-		client:read_start(function(err, data)
-			if err then
-				log("Read error:", err)
+		client:read_start(function(read_err, data)
+			if read_err then
+				log("ERROR", "read", read_err)
 				return
 			end
 
@@ -75,7 +69,7 @@ function M.start()
 				return
 			end
 
-			-- EOF
+			-- EOF: 提取 HTTP body
 			local body = buffer:match("\r\n\r\n(.*)")
 
 			if body then
@@ -84,11 +78,11 @@ function M.start()
 					if ok and decoded then
 						handler.handle(decoded, M.config)
 					else
-						log("Failed to decode JSON")
+						log("WARN", "read", "JSON decode failed")
 					end
 				end)
 			else
-				log("No body found")
+				log("WARN", "read", "No body found")
 			end
 
 			local response = "HTTP/1.1 200 OK\r\nContent-Length:0\r\n\r\n"
@@ -104,7 +98,7 @@ function M.start()
 		end)
 	end)
 
-	log("HTTP server listening on " .. host .. ":" .. port)
+	log("INFO", "start", "Listening on " .. host .. ":" .. port)
 end
 
 function M.stop()
@@ -126,7 +120,7 @@ function M.stop()
 	end
 
 	server = nil
-	log("HTTP server stopped")
+	log("INFO", "stop", "Stopped")
 end
 
 return M
