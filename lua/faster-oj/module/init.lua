@@ -45,7 +45,6 @@ function M.run(need_compile)
 		local file_path = utils.get_file_path()
 		local json = utils.get_json_file()
 		local tests = {}
-		local test_count = 0
 
 		vim.cmd("write")
 
@@ -55,7 +54,14 @@ function M.run(need_compile)
 			return
 		end
 
-		ui.update(json.testCount or 0, tests)
+		local test_count = json.testCount or 0
+		local problem_dir = utils.get_problem_dir_from(file_path)
+		for i = 0, test_count - 1 do
+			local tc = utils.read_test_case(problem_dir, i)
+			tests[i + 1] = { input = tc.input, expected = tc.output }
+		end
+
+		ui.update(test_count, tests)
 
 		local ext = vim.fn.fnamemodify(file_path, ":e")
 		local has_compile = M.config.compile_command[ext]
@@ -86,13 +92,13 @@ function M.run(need_compile)
 				ui.show()
 			end
 
-			log("INFO", "run", "Running " .. (json.testCount or 0) .. " test(s)")
-			notify.show("Running " .. (json.testCount or 0) .. " test(s) ...", "INFO", 2000)
+			log("INFO", "run", "Running " .. test_count .. " test(s)")
+			notify.show("Running " .. test_count .. " test(s) ...", "INFO", 2000)
 
 			runner.run(file_path, json, function(res)
 				log("INFO", "run", "Test " .. res.test_index .. " completed")
 				tests[res.test_index] = res
-				ui.update(json.testCount or 0, tests)
+				ui.update(test_count, tests)
 
 				local finished = 0
 				local ac_count = 0
@@ -102,9 +108,9 @@ function M.run(need_compile)
 						ac_count = ac_count + 1
 					end
 				end
-				if finished == (json.testCount or 0) then
+				if finished == test_count then
 					log("INFO", "run", string.format("All done: %d/%d AC", ac_count, finished))
-					local total = json.testCount or 0
+					local total = test_count
 					if ac_count == total then
 						notify.show(string.format("Done: %d/%d AC", ac_count, total), "DONE")
 					else

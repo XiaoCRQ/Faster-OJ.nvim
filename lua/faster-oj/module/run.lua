@@ -284,8 +284,9 @@ end
 ---@param input string
 ---@param tl_ms integer
 ---@param ml_mb integer
+---@param std_out string|nil
 ---@param cb fun(res:table)
-function M.run_single(cmd_raw, vars, input, tl_ms, ml_mb, cb)
+function M.run_single(cmd_raw, vars, input, tl_ms, ml_mb, std_out, cb)
 	local final_exec, final_args = build_exec_cmd(cmd_raw, vars, tl_ms)
 	local stdout, stderr, stdin = uv.new_pipe(false), uv.new_pipe(false), uv.new_pipe(false)
 
@@ -388,7 +389,7 @@ end
 ---@param ml_mb integer
 ---@param cb fun(res:table)
 local function run_single_task(cmd_raw, vars, input, std_out, tl_ms, ml_mb, cb)
-	M.run_single(cmd_raw, vars, input, tl_ms, ml_mb, function(raw)
+	M.run_single(cmd_raw, vars, input, tl_ms, ml_mb, std_out, function(raw)
 		if M.config.warning_msg and last_compile_msg then
 			raw.state.msg = last_compile_msg
 		end

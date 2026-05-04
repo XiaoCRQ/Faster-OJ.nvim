@@ -205,12 +205,12 @@ local function run_paired(correct_cmd, test_cmd, correct_vars, test_vars, input_
 		cb(res)
 	end
 
-	runner.run_single(correct_cmd, correct_vars, input_data.input, tl_ms, ml_mb, function(raw)
+	runner.run_single(correct_cmd, correct_vars, input_data.input, tl_ms, ml_mb, nil, function(raw)
 		res.correct = raw
 		correct_done = true
 		try_finish()
 	end)
-	runner.run_single(test_cmd, test_vars, input_data.input, tl_ms, ml_mb, function(raw)
+	runner.run_single(test_cmd, test_vars, input_data.input, tl_ms, ml_mb, nil, function(raw)
 		res.test = raw
 		test_done = true
 		try_finish()
