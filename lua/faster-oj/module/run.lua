@@ -237,8 +237,8 @@ function M.compile(file_path, need_compile, on_compile_finish)
 		return utils.expand(a, vars)
 	end, cmd_raw.args or {})
 
-	-- 确保 .output/ 目录存在
-	vim.fn.mkdir(vars.DIR .. "/.output", "p")
+	-- 确保 .output/ 目录存在 (os.execute 安全于任何上下文, mkdir -p 幂等)
+	os.execute('mkdir -p "' .. vars.DIR .. '/.output" 2>/dev/null')
 
 	log("INFO", "compile", "Compiling " .. file_path)
 	log("INFO", "compile", "Exec: " .. exec .. " Args: " .. vim.inspect(args))
