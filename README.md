@@ -65,7 +65,7 @@ local code_path = vim.fn.expand("~/Work/Program/CodeForces")
 }
 ```
 
-To customize compile/run commands, override `compile_command` / `run_command` (see [Configuration Reference](#-configuration-reference)).
+To customize compile/run commands, override `compile_command` / `run_command` .
 
 ---
 
@@ -98,7 +98,7 @@ map("n", "<leader>cdj", ":FOJ find data<CR>",     vim.tbl_extend("force", opts, 
 
 -- Stress testing
 map("n", "<leader>cdP", ":FOJ stress correct=find: test=find:<CR>",
-    vim.tbl_extend("force", opts, { desc = "FOJ: Stress test (对拍)" }))
+    vim.tbl_extend("force", opts, { desc = "FOJ: Stress test" }))
 ```
 
 ---
@@ -162,6 +162,7 @@ map("n", "<leader>cdP", ":FOJ stress correct=find: test=find:<CR>",
 | `mem` | integer (MB) | Memory limit per case (default: `default_memory_limit`) |
 
 **Examples:**
+
 ```vim
 " Pick both files interactively (data auto-loaded from problem dirs)
 :FOJ stress correct=find: test=find:

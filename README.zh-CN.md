@@ -65,7 +65,7 @@ local code_path = vim.fn.expand("~/Work/Program/CodeForces")
 }
 ```
 
-如需自定义编译/运行命令，覆盖 `compile_command` / `run_command` 即可（参见[配置参数详解](#-配置参数详解)）。
+如需自定义编译/运行命令，覆盖 `compile_command` / `run_command` 即可。
 
 ---
 
@@ -162,6 +162,7 @@ map("n", "<leader>cdP", ":FOJ stress correct=find: test=find:<CR>",
 | `mem` | 整数 (MB) | 内存限制（默认: `default_memory_limit`） |
 
 **示例：**
+
 ```vim
 " 交互选取两个文件（数据自动从题目目录加载）
 :FOJ stress correct=find: test=find:
