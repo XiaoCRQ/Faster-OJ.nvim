@@ -44,14 +44,12 @@ local function write_lines(path, lines)
 end
 
 ---裁剪历史条目到 max_solve_history
----@param history_path string
 local function trim_history(history_path)
 	local max_entries = (M.config and M.config.max_solve_history) or 100
 	local lines = read_lines(history_path)
 	if #lines <= max_entries then
 		return
 	end
-	-- 保留最新的 max_entries 条
 	local trimmed = {}
 	for i = #lines - max_entries + 1, #lines do
 		table.insert(trimmed, lines[i])
@@ -61,6 +59,8 @@ local function trim_history(history_path)
 end
 
 ---归档当前题目到 solve_dir
+---有题目数据时: 源文件放入数据文件夹后一并转移
+---无题目数据时: 源文件单独转移
 function M.solve()
 	local file_path = utils.get_file_path()
 
@@ -82,46 +82,48 @@ function M.solve()
 	local problem_name = vim.fn.fnamemodify(file_path, ":t:r")
 	local abs_original = vim.fn.fnamemodify(file_path, ":p")
 
-	-- 1. 移动源文件
 	vim.cmd("write")
-	local target_path = solve_dir .. "/" .. filename
 
-	local ok, err = uv.fs_rename(abs_original, target_path)
-	if not ok then
-		log("ERROR", "solve", "Move source failed: " .. (err or ""))
-		return
-	end
-	vim.cmd("bd!")
+	local problem_dir = utils.get_problem_dir_from(file_path)
+	local has_data = (problem_dir ~= "" and utils.dir_exists(problem_dir))
 
-	-- 2. 移动题目文件夹
-	local problem_dir = data_dir .. "/" .. problem_name
-	local problem_target = solve_dir .. "/" .. problem_name
-	local has_problem_dir = vim.fn.isdirectory(problem_dir) == 1
-
-	if has_problem_dir then
-		local pok, perr = uv.fs_rename(problem_dir, problem_target)
-		if not pok then
-			log("WARN", "solve", "Move problem dir failed: " .. (perr or ""))
-			has_problem_dir = false
+	if has_data then
+		-- 有题目数据: 源文件移入数据文件夹, 再整体转移
+		local src_in_data = problem_dir .. filename
+		local ok, err = uv.fs_rename(abs_original, src_in_data)
+		if not ok then
+			log("ERROR", "solve", "Move source into data dir failed: " .. (err or ""))
+			return
 		end
+
+		local data_target = solve_dir .. "/" .. problem_name
+		local pok, perr = uv.fs_rename(problem_dir, data_target)
+		if not pok then
+			-- 回滚源文件
+			uv.fs_rename(src_in_data, abs_original)
+			log("ERROR", "solve", "Move data dir failed: " .. (perr or ""))
+			return
+		end
+
+		vim.cmd("bd!")
+	else
+		-- 无题目数据: 仅转移源文件
+		local target_path = solve_dir .. "/" .. filename
+		local ok, err = uv.fs_rename(abs_original, target_path)
+		if not ok then
+			log("ERROR", "solve", "Move source failed: " .. (err or ""))
+			return
+		end
+		vim.cmd("bd!")
 	end
 
-	-- 3. 写入历史
+	-- 写入历史: file_name \t original_path \t problem_name
 	local history_path = solve_dir .. "/.history"
-	-- 格式: file_name \t file_raw_path \t problem_name \t problem_original_dir
-	local history_line = string.format(
-		"%s\t%s\t%s\t%s",
-		filename,
-		abs_original,
-		problem_name,
-		has_problem_dir and problem_dir or ""
-	)
+	local history_line = string.format("%s\t%s\t%s", filename, abs_original, has_data and problem_name or "")
 
 	local lines = read_lines(history_path)
 	table.insert(lines, history_line)
 	write_lines(history_path, lines)
-
-	-- 裁剪超出上限的历史条目
 	trim_history(history_path)
 
 	log("INFO", "solve", "Solved: " .. filename)
@@ -148,41 +150,61 @@ function M.solve_back()
 
 	while #lines > 0 do
 		local last = lines[#lines]
-		-- 新格式: file_name \t file_raw_path \t problem_name \t problem_original_dir
-		local f_name, f_path, p_name, p_original_dir = last:match("^(.-)\t(.-)\t(.-)\t(.-)$")
-
+		-- 新格式: file_name \t original_path \t problem_name
+		-- 旧格式兼容: file_name \t original_path \t problem_name \t problem_original_dir
+		local f_name, f_path, p_name = last:match("^(.-)\t(.-)\t(.-)\t.-$")
+			or last:match("^(.-)\t(.-)\t(.-)$")
 		if not f_name then
-			-- 兼容旧格式: file_name \t file_raw_path [\t json_name \t json_path]
+			-- 更旧的格式: file_name \t original_path
 			f_name, f_path = last:match("^(.-)\t(.+)$")
-			p_name, p_original_dir = "", ""
+			p_name = ""
 		end
 
 		if not f_name or not f_path then
 			table.remove(lines)
 		else
 			local current_f_path = solve_dir .. "/" .. f_name
-			local current_p_dir = (p_name ~= "") and (solve_dir .. "/" .. p_name) or nil
+
+			if p_name and p_name ~= "" then
+				-- 有题目数据: 源文件在 solve_dir/name/filename
+				current_f_path = solve_dir .. "/" .. p_name .. "/" .. f_name
+			end
 
 			if not utils.file_exists(current_f_path) then
 				table.remove(lines)
 			else
-				-- 1. 还原源文件
+				-- 1. 还原
 				local original_dir = vim.fn.fnamemodify(f_path, ":h")
 				ensure_dir(original_dir)
-				local ok, err = uv.fs_rename(current_f_path, f_path)
-				if not ok then
-					log("ERROR", "solve_back", "Restore source failed: " .. (err or ""))
-					return
+
+				if p_name and p_name ~= "" then
+					-- 有数据: 先还原整个数据文件夹, 再抽出源文件
+					local current_p_dir = solve_dir .. "/" .. p_name
+					local target_p_dir = data_dir .. "/" .. p_name
+					ensure_dir(vim.fn.fnamemodify(target_p_dir, ":h"))
+
+					-- 先移出源文件到原始位置
+					local ok, err = uv.fs_rename(current_f_path, f_path)
+					if not ok then
+						log("ERROR", "solve_back", "Restore source failed: " .. (err or ""))
+						return
+					end
+
+					-- 再还原数据文件夹(无源文件的数据文件夹)
+					if vim.fn.isdirectory(current_p_dir) == 1 then
+						ensure_dir(vim.fn.fnamemodify(target_p_dir, ":h"))
+						uv.fs_rename(current_p_dir, target_p_dir)
+					end
+				else
+					-- 无数据: 直接还原源文件
+					local ok, err = uv.fs_rename(current_f_path, f_path)
+					if not ok then
+						log("ERROR", "solve_back", "Restore source failed: " .. (err or ""))
+						return
+					end
 				end
 
-				-- 2. 还原题目文件夹
-				if current_p_dir and vim.fn.isdirectory(current_p_dir) == 1 and p_original_dir ~= "" then
-					local original_p_dir = p_original_dir
-					ensure_dir(vim.fn.fnamemodify(original_p_dir, ":h"))
-					uv.fs_rename(current_p_dir, original_p_dir)
-				end
-
-				-- 3. 清理历史
+				-- 2. 清理历史
 				table.remove(lines)
 				if #lines == 0 then
 					uv.fs_unlink(history_path)
