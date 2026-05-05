@@ -11,18 +11,17 @@
 
 </div>
 
-**Faster-OJ.nvim** is a Neovim plugin designed specifically for **Competitive Programming**. By integrating problem fetching, local judging, and automated submission, it aims to provide a **distraction-free and immersive coding environment** for solving problems.
+**Faster-OJ.nvim** is a Neovim plugin designed for **Competitive Programming**. It integrates problem fetching, local judging, stress testing, and automated submission into a distraction-free workflow.
 
 ---
 
 ## ✨ Core Features
 
-- **Fully Automated Workflow**: Fetch problems via [Competitive Companion](https://github.com/jmerle/competitive-companion) and submit solutions with the [Faster-OJ browser extension](https://github.com/XiaoCRQ/Faster-OJ), eliminating manual copy-paste.
-- **Dual Server Architecture**: Built-in **HTTP** server receives problem data; **WebSocket** server communicates with browser extension for submission.
-- **High-Performance Local Judge**: Concurrent test execution (`max_workers`) with platform-aware time/memory measurement. Supports **lexical fuzzy matching** (`obscure`) and memory offset compensation.
-- **Multi-Panel UI**: Judge results viewer, test case editor with real-time file sync, stress testing UI.
-- **Stress Testing (对拍)**: Run two solutions against the same inputs and compare outputs — find edge cases in your optimized solution.
-- **Smart Finder**: Deep integration with `snacks.nvim`, `telescope.nvim`, `fzf-lua`, `mini.pick`, or built-in `vim.ui.select`.
+- **Fully Automated Workflow**: Fetch problems via [Competitive Companion](https://github.com/jmerle/competitive-companion) and submit with the [Faster-OJ browser extension](https://github.com/XiaoCRQ/Faster-OJ).
+- **Local Judge**: Concurrent test execution with time/memory measurement. Lexical fuzzy matching (`obscure`) and memory offset compensation.
+- **Stress Testing (对拍)**: Run two solutions against the same inputs — catch edge cases fast.
+- **Multi-Panel UI**: Judge results, test case editor with real-time sync, stress test viewer.
+- **Smart Finder**: Integrates with `snacks.nvim`, `telescope.nvim`, `fzf-lua`, `mini.pick`, or `vim.ui.select`.
 
 ---
 
@@ -30,10 +29,10 @@
 
 ### Dependencies
 
-- **Neovim** >= 0.9 (libuv event loop)
+- **Neovim** >= 0.9
 - **Browser Extensions**:
-  - [Competitive Companion](https://github.com/jmerle/competitive-companion) — for receiving problems
-  - [Faster-OJ Browser Extension](https://github.com/XiaoCRQ/Faster-OJ) — for submitting solutions
+  - [Competitive Companion](https://github.com/jmerle/competitive-companion) — receives problems
+  - [Faster-OJ Browser Extension](https://github.com/XiaoCRQ/Faster-OJ) — submits solutions
 - **Language toolchains** as needed (gcc/g++, python3, node, etc.)
 
 ### Minimal Configuration (lazy.nvim)
@@ -47,7 +46,7 @@
 
 ### Recommended Configuration
 
-Only non-default overrides shown. All omitted fields use built-in defaults.
+Only non-default overrides shown.
 
 ```lua
 local code_path = vim.fn.expand("~/Work/Program/CodeForces")
@@ -55,12 +54,10 @@ local code_path = vim.fn.expand("~/Work/Program/CodeForces")
 {
   "xiaocrq/faster-oj.nvim",
   opts = {
-    -- Show compilation warnings in judge results
     warning_msg = true,
-    -- Paths
     work_dir = code_path,
     temp_dir = code_path .. "/.temp",
-    json_dir = code_path .. "/.problem",
+    data_dir = code_path .. "/.problem",
     solve_dir = code_path .. "/.solve",
     template_dir = code_path .. "/.template",
     template_default = code_path .. "/.template/template.cpp",
@@ -68,7 +65,7 @@ local code_path = vim.fn.expand("~/Work/Program/CodeForces")
 }
 ```
 
-To customize compile/run commands per language, override `compile_command` / `run_command` with your own entries (see [Configuration Reference](#-configuration-reference)).
+To customize compile/run commands, override `compile_command` / `run_command` (see [Configuration Reference](#-configuration-reference)).
 
 ---
 
@@ -78,7 +75,7 @@ To customize compile/run commands per language, override `compile_command` / `ru
 local map = vim.keymap.set
 local opts = { noremap = true, silent = true }
 
--- Service control
+-- Service
 map("n", "<leader>cda", ":FOJ<CR>",              vim.tbl_extend("force", opts, { desc = "FOJ: Start services" }))
 map("n", "<leader>cdq", ":FOJ stop<CR>",         vim.tbl_extend("force", opts, { desc = "FOJ: Stop services" }))
 map("n", "<leader>cdr", ":FOJ submit<CR>",       vim.tbl_extend("force", opts, { desc = "FOJ: Submit solution" }))
@@ -108,133 +105,133 @@ map("n", "<leader>cdP", ":FOJ stress correct=find: test=find:<CR>",
 
 ## 🛠 Commands
 
-### Service Control
+### Service
 
 | Command | Description |
 | --- | --- |
 | `:FOJ` | Start HTTP + WebSocket services (switches to `work_dir` first) |
-| `:FOJ start [mod]` | Start specific mode: `all` / `http` / `ws` |
+| `:FOJ start [mod]` | Start mode: `all` / `http` / `ws` |
 | `:FOJ stop [mod]` | Stop services |
 
-### Judge & Test
+### Judge
 
 | Command | Description |
 | --- | --- |
-| `:FOJ run` | Save, compile, and run all test cases with UI |
+| `:FOJ run` | Save, compile, and run all test cases |
 | `:FOJ test` | Run test cases without recompiling |
 | `:FOJ show` | Toggle judge result UI |
-| `:FOJ edit` | Toggle test case editor UI (supports add/delete/modify) |
+| `:FOJ edit` | Toggle test case editor (add/delete/modify) |
 
-### Submission
+### Submit
 
 | Command | Description |
 | --- | --- |
-| `:FOJ submit` | Send current code to browser extension via WebSocket |
+| `:FOJ submit` | Send code to browser extension via WebSocket |
 
 ### Problem Management
 
 | Command | Description |
 | --- | --- |
-| `:FOJ solve` | Move problem to `solve_dir` and record in history |
-| `:FOJ solve back` | Undo last solve — restore problem files |
-| `:FOJ erase` | Delete current problem source + problem data directory |
+| `:FOJ solve` | Move problem to `solve_dir`, record history |
+| `:FOJ solve back` | Undo last solve, restore files |
+| `:FOJ erase` | Delete problem source + data directory |
 
 ### Finder
 
 | Command | Description |
 | --- | --- |
-| `:FOJ find template` | Browse template files in `template_dir` |
-| `:FOJ find problem` | Browse problem source files in `work_dir` |
-| `:FOJ find data` | Browse problem data directories in `json_dir` |
+| `:FOJ find template` | Browse templates in `template_dir` |
+| `:FOJ find problem` | Browse source files in `work_dir` |
+| `:FOJ find data` | Browse problem data in `data_dir` |
 
-### Stress Testing (对拍)
+### Stress Testing
 
 | Command | Description |
 | --- | --- |
 | `:FOJ stress` | Re-run last stress test |
 | `:FOJ stress correct=type:val test=type:val [data=type:val] [time=N] [mem=N]` | Run stress test |
 
-**Stress parameters:**
+**Parameters:**
 
 | Parameter | Type | Description |
 | --- | --- | --- |
-| `correct` | `path:FILE` or `find:` | Reference (correct) solution |
+| `correct` | `path:FILE` or `find:` | Reference solution |
 | `test` | `path:FILE` or `find:` | Solution under test |
-| `data` | `path:P1\nP2` / `find:` / `data:RAW` | Input data source (optional, defaults to empty input) |
+| `data` | `path:P1\nP2` / `find:` / `data:RAW` | Input data (optional: auto-loads from correct/test problem dir) |
 | `time` | integer (ms) | Time limit per case (default: `default_time_limit`) |
 | `mem` | integer (MB) | Memory limit per case (default: `default_memory_limit`) |
 
-**Stress examples:**
+**Examples:**
 ```vim
-" Select both files via picker
+" Pick both files interactively (data auto-loaded from problem dirs)
 :FOJ stress correct=find: test=find:
 
 " Direct paths, different languages
 :FOJ stress correct=path:brute.py test=path:solve.cpp
 
-" With raw data and limits
-:FOJ stress correct=path:a.cpp test=path:b.cpp data=data:5\n1 2 3\n4 5 6 time=1000 mem=128
+" With raw data
+:FOJ stress correct=path:a.cpp test=path:b.cpp data=data:5\n1 2 3 time=1000
 ```
 
 ---
 
 ## ⚙️ Configuration Reference
 
-### Path & Basic
+### Paths
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
 | `work_dir` | string | `""` | Base working directory |
-| `temp_dir` | string | `".temp"` | Temporary files (stress data, submit temp) |
-| `json_dir` | string | `".problem"` | Problem data storage directory |
-| `solve_dir` | string | `".solve"` | Archive for solved problems |
+| `data_dir` | string | `".problem"` | Problem data directory |
+| `solve_dir` | string | `".solve"` | Solved problems archive |
+| `temp_dir` | string | `".temp"` | Temporary files |
 | `template_dir` | string | `""` | Template directory |
-| `template_default` | string | `""` | Default template file path |
+| `template_default` | string | `""` | Default template file |
 | `template_default_ext` | string | `".cpp"` | Fallback language extension |
-| `auto_open` | boolean | `true` | Auto-open source file on problem receipt |
+| `auto_open` | boolean | `true` | Auto-open file on problem receipt |
 
-### Server & Judge
+### Server
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
-| `http_host` | string | `"127.0.0.1"` | HTTP server bind address |
-| `http_port` | integer | `10043` | HTTP server port |
-| `ws_host` | string | `"127.0.0.1"` | WebSocket server bind address |
-| `ws_port` | integer | `10044` | WebSocket server port |
+| `http_host` | string | `"127.0.0.1"` | HTTP bind address |
+| `http_port` | integer | `10043` | HTTP port |
+| `ws_host` | string | `"127.0.0.1"` | WebSocket bind address |
+| `ws_port` | integer | `10044` | WebSocket port |
 | `server_mod` | string | `"all"` | Startup mode: `http` / `ws` / `all` |
-| `max_time_out` | integer | `5` | Browser connection timeout (seconds) |
-| `max_workers` | integer | `5` | Max concurrent judge workers |
-| `max_solve_history` | integer | `100` | Max entries in solve history |
-| `debug` | boolean | `false` | Enable debug logging |
+| `max_time_out` | integer | `5` | Browser connection timeout (s) |
 
-### Judge Behavior
+### Judge
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
-| `obscure` | boolean | `true` | Lexical fuzzy matching (ignore excess whitespace) |
-| `warning_msg` | boolean | `false` | Show compilation warnings in judge results |
+| `max_workers` | integer | `5` | Max concurrent workers |
+| `obscure` | boolean | `true` | Lexical fuzzy matching |
+| `warning_msg` | boolean | `false` | Show compile warnings in results |
+| `clipboard_submit` | boolean | `false` | Copy code to clipboard on submit |
 | `default_time_limit` | integer | `2000` | Fallback time limit (ms) |
 | `default_memory_limit` | integer | `256` | Fallback memory limit (MB) |
-| `linux_mem_offset` | integer | `-2900` | Memory measurement offset on Linux (KB) |
-| `macos_mem_offset` | integer | `-1500` | Memory measurement offset on macOS (KB) |
+| `linux_mem_offset` | integer | `-2900` | Linux memory offset (KB) |
+| `macos_mem_offset` | integer | `-1500` | macOS memory offset (KB) |
+| `max_solve_history` | integer | `100` | Max solve history entries |
+| `debug` | boolean | `false` | Debug logging |
 
 ### Variable Expansion
 
-Compile/run command strings support `$(VAR)` / `@VAR` / `%VAR%` placeholders:
+Commands support `$(VAR)` / `@VAR` / `%VAR%`:
 
 | Variable | Expands to |
 | --- | --- |
-| `$(FNAME)` | Full filename (e.g., `123A.cpp`) |
-| `$(FNOEXT)` | Filename without extension (e.g., `123A`) |
+| `$(FNAME)` | Full filename (`123A.cpp`) |
+| `$(FNOEXT)` | Filename without extension (`123A`) |
 | `$(FABSPATH)` | Absolute path to source file |
 | `$(DIR)` | Directory of source file |
 
 ### Compile & Run Commands
 
-`compile_command` and `run_command` are tables keyed by file extension. Each entry has `exec` (executable) and optional `args` (argument list).
+Tables keyed by file extension. Each entry: `exec` + optional `args`.
 
 ```lua
--- Example: custom C++ configuration
 compile_command = {
   cpp = {
     exec = "g++",
@@ -248,30 +245,24 @@ run_command = {
 
 ### UI Layouts
 
-Three UI configurations control floating window layouts:
-
-- **`tc_ui`** — Judge results viewer (testcases, input, output, info, expected output)
+- **`tc_ui`** — Judge results (testcases, input, output, info, expected output)
 - **`tc_edit_ui`** — Test case editor (testcase list, input, output)
-- **`stress_ui`** — Stress test viewer (same layout as tc_ui)
+- **`stress_ui`** — Stress test viewer
 
-Each has `width`, `height`, `layout` (recursive `{weight, content}` tree), and `mappings`.
+Each has `width`, `height`, `layout` (recursive tree), and `mappings`.
 
 ### Highlights
 
 ```lua
 highlights = {
-  windows = {
-    Header = "#c0c0c0", Correct = "#00ff00", Warning = "orange", Wrong = "red",
-  },
-  stdio = {
-    Header = "#c0c0c0", Correct = "#00ff00", Warning = "orange", Wrong = "orange",
-  },
+  windows = { Header = "#c0c0c0", Correct = "#00ff00", Warning = "orange", Wrong = "red" },
+  stdio   = { Header = "#c0c0c0", Correct = "#00ff00", Warning = "orange", Wrong = "orange" },
 },
 ```
 
 ### Code Obfuscator
 
-Optional: pre-process code before submission (use with caution).
+Optional pre-processing before submission (use with caution).
 
 ```lua
 code_obfuscator = {
@@ -282,42 +273,12 @@ code_obfuscator = {
 
 ---
 
-## 🔄 Recommended Workflow
-
-```
-Browser (Competitive Companion)  ➔  Neovim (Faster-OJ.nvim)  ➔  Local Judge
-                                                                     ↓
-Online Judge  ⬅  Browser Extension (Faster-OJ)  ⬅  Submit Command
-```
-
-1. **Fetch**: Click the browser extension — problem data syncs to Neovim automatically.
-2. **Code**: Write your solution; a template file is created automatically.
-3. **Test**: Run `:FOJ run` to compile and execute all test cases concurrently.
-4. **Submit**: After all tests pass, run `:FOJ submit` — the browser extension submits for you.
-
-### Problem Data Format
-
-```
-.problem/
-└── ProblemName/
-    ├── problem.json    # { url, name, testCount, memoryLimit, timeLimit }
-    ├── 0.in / 0.out
-    ├── 1.in / 1.out
-    └── ...
-```
-
----
-
 ## 📊 Platform & Language Support
 
-- **Cross-platform**: Windows, Linux, macOS with platform-aware time/memory measurement.
-  - Linux: `timeout` + `/usr/bin/time -v` for hard time limits and RSS memory
-  - macOS: `/usr/bin/time -l` + uv timer fallback
-  - Windows: PowerShell `Start-Process` with `PeakWorkingSet64`
-- **Built-in languages**:
-  - **Compiled**: C, C++, Rust, Go, Java, Kotlin, C#, Pascal, Swift, Zig
-  - **Scripting**: Python, JavaScript (Node), TypeScript (ts-node), Lua
+- **Cross-platform**: Windows, Linux, macOS.
+- **Compiled languages**: C, C++, Rust, Go, Java, Kotlin, C#, Pascal, Swift, Zig.
+- **Scripting languages**: Python, JavaScript (Node), TypeScript (ts-node), Lua.
 
 ---
 
-If you have questions or suggestions, feel free to open an [Issue](https://github.com/XiaoCRQ/Faster-OJ.nvim/issues) or submit a PR!
+If you have questions or suggestions, open an [Issue](https://github.com/XiaoCRQ/Faster-OJ.nvim/issues) or submit a PR!

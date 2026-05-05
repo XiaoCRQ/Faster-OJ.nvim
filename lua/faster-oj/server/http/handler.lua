@@ -28,7 +28,7 @@ end
 
 ---处理来自浏览器插件的题目数据
 ---存储格式:
----   json_dir/
+---   data_dir/
 ---   └── ProblemName/
 ---       ├── problem.json   {url, name, testCount, memoryLimit, timeLimit}
 ---       ├── 0.in / 0.out

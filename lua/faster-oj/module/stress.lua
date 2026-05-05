@@ -119,7 +119,8 @@ local function resolve_data(source, cb)
 		cb(inputs)
 	elseif source.type == "find" then
 		local dir = (source.data and source.data ~= "") and source.data or vim.fn.getcwd()
-		pick_files(dir, function(paths)
+		vim.schedule(function()
+			pick_files(dir, function(paths)
 			if not paths then
 				cb(nil)
 				return
@@ -130,6 +131,7 @@ local function resolve_data(source, cb)
 				table.insert(inputs, { input = content, label = vim.fn.fnamemodify(p, ":t") })
 			end
 			cb(inputs)
+		end)
 		end)
 	elseif source.type == "data" then
 		local temp_dir = M.config.temp_dir or ".temp"
@@ -367,9 +369,21 @@ function M.stress(opts)
 				end)
 			end
 
-			-- 数据源: 缺失时使用空输入
+			-- 数据源: 缺失时尝试从 correct/test 的题目目录加载
 			if not opts.data then
-				after_data({ { input = "", label = "(empty)" } })
+				local function try_load_data(path)
+					local name = vim.fn.fnamemodify(path, ":t:r")
+					local dir = M.config.data_dir .. "/" .. name
+					if vim.fn.isdirectory(dir) == 0 then return nil end
+					local inputs = {}
+					for i = 0, utils.get_test_count(dir) - 1 do
+						local tc = utils.read_test_case(dir, i)
+						table.insert(inputs, { input = tc.input, label = name .. "/" .. i .. ".in" })
+					end
+					return #inputs > 0 and inputs or nil
+				end
+				local inputs = try_load_data(correct_path) or try_load_data(test_path)
+				after_data(inputs or { { input = "", label = "(empty)" } })
 			else
 				resolve_data(opts.data, after_data)
 			end

@@ -70,7 +70,7 @@ function M.run(need_compile)
 
 		local compile_spin = nil
 		if has_compile and need_compile ~= false then
-			compile_spin = notify.spinner_start("Compiling " .. vim.fn.fnamemodify(file_path, ":t") .. " ...")
+			compile_spin = notify.spinner_start("Compiling " .. vim.fn.fnamemodify(file_path, ":t"))
 		end
 
 		log("INFO", "run", "Starting test execution")
