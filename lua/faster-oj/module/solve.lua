@@ -22,15 +22,12 @@ local function log(level, func, msg)
 	end
 end
 
----确保目录存在
 local function ensure_dir(path)
 	if vim.fn.isdirectory(path) == 0 then
 		vim.fn.mkdir(path, "p")
 	end
 end
 
----读取文件行
----@return string[]
 local function read_lines(path)
 	if vim.fn.filereadable(path) == 0 then
 		return {}
@@ -38,12 +35,10 @@ local function read_lines(path)
 	return vim.fn.readfile(path)
 end
 
----写入文件行
 local function write_lines(path, lines)
 	vim.fn.writefile(lines, path)
 end
 
----裁剪历史条目到 max_solve_history
 local function trim_history(history_path)
 	local max_entries = (M.config and M.config.max_solve_history) or 100
 	local lines = read_lines(history_path)
@@ -59,16 +54,16 @@ local function trim_history(history_path)
 end
 
 ---归档当前题目到 solve_dir
----有题目数据时: 源文件放入数据文件夹后一并转移
----无题目数据时: 源文件单独转移
+---
+---History 格式: 每行为 \t 分隔的路径对, 每对 (from, to) 表示一次 mv 操作
+---  有数据: source_from \t source_to \t data_from \t data_to
+---  无数据: source_from \t source_to
 function M.solve()
 	local file_path = utils.get_file_path()
-
-	if not file_path or file_path == "" then
+	if file_path == "" then
 		log("WARN", "solve", "No file to solve")
 		return
 	end
-
 	if not M.config or not M.config.solve_dir then
 		log("ERROR", "solve", "solve_dir not configured")
 		return
@@ -87,40 +82,48 @@ function M.solve()
 	local problem_dir = utils.get_problem_dir_from(file_path)
 	local has_data = (problem_dir ~= "" and utils.dir_exists(problem_dir))
 
+	local history_parts = {}
+
 	if has_data then
-		-- 有题目数据: 源文件移入数据文件夹, 再整体转移
+		-- Step 1: 源文件 → 数据文件夹内
 		local src_in_data = problem_dir .. filename
 		local ok, err = uv.fs_rename(abs_original, src_in_data)
 		if not ok then
 			log("ERROR", "solve", "Move source into data dir failed: " .. (err or ""))
 			return
 		end
+		table.insert(history_parts, abs_original)
+		table.insert(history_parts, src_in_data)
 
+		-- Step 2: 数据文件夹 → solve_dir
 		local data_target = solve_dir .. "/" .. problem_name
 		local pok, perr = uv.fs_rename(problem_dir, data_target)
 		if not pok then
-			-- 回滚源文件
+			-- 回滚 step 1
 			uv.fs_rename(src_in_data, abs_original)
 			log("ERROR", "solve", "Move data dir failed: " .. (perr or ""))
 			return
 		end
+		table.insert(history_parts, problem_dir)
+		table.insert(history_parts, data_target)
 
 		vim.cmd("bd!")
 	else
-		-- 无题目数据: 仅转移源文件
+		-- 单步: 源文件 → solve_dir
 		local target_path = solve_dir .. "/" .. filename
 		local ok, err = uv.fs_rename(abs_original, target_path)
 		if not ok then
 			log("ERROR", "solve", "Move source failed: " .. (err or ""))
 			return
 		end
+		table.insert(history_parts, abs_original)
+		table.insert(history_parts, target_path)
+
 		vim.cmd("bd!")
 	end
 
-	-- 写入历史: file_name \t original_path \t problem_name
+	local history_line = table.concat(history_parts, "\t")
 	local history_path = solve_dir .. "/.history"
-	local history_line = string.format("%s\t%s\t%s", filename, abs_original, has_data and problem_name or "")
-
 	local lines = read_lines(history_path)
 	table.insert(lines, history_line)
 	write_lines(history_path, lines)
@@ -130,7 +133,10 @@ function M.solve()
 	notify.show("Solved: " .. filename, "DONE")
 end
 
----撤销上一次 solve 操作，还原文件
+---撤销上一次 solve 操作
+---
+---逐对 (from, to) 反向 mv: to → from
+---若中间某对失败则终止, 跳过已损坏的历史条目
 function M.solve_back()
 	if not M.config or not M.config.solve_dir then
 		log("ERROR", "solve_back", "solve_dir not configured")
@@ -138,7 +144,6 @@ function M.solve_back()
 	end
 
 	local solve_dir = M.config.solve_dir
-	local data_dir = M.config.data_dir
 	local history_path = solve_dir .. "/.history"
 
 	if vim.fn.filereadable(history_path) == 0 then
@@ -147,87 +152,67 @@ function M.solve_back()
 	end
 
 	local lines = read_lines(history_path)
+	local restored_path = nil -- 用于 auto_open
 
 	while #lines > 0 do
 		local last = lines[#lines]
-		-- 新格式: file_name \t original_path \t problem_name
-		-- 旧格式兼容: file_name \t original_path \t problem_name \t problem_original_dir
-		local f_name, f_path, p_name = last:match("^(.-)\t(.-)\t(.-)\t.-$")
-			or last:match("^(.-)\t(.-)\t(.-)$")
-		if not f_name then
-			-- 更旧的格式: file_name \t original_path
-			f_name, f_path = last:match("^(.-)\t(.+)$")
-			p_name = ""
-		end
+		local parts = vim.split(last, "\t", { plain = true })
 
-		if not f_name or not f_path then
+		-- 必须为偶数个字段 (from, to 成对)
+		if #parts < 2 or #parts % 2 ~= 0 then
+			log("WARN", "solve_back", "Corrupted history line, skipped")
 			table.remove(lines)
 		else
-			local current_f_path = solve_dir .. "/" .. f_name
-
-			if p_name and p_name ~= "" then
-				-- 有题目数据: 源文件在 solve_dir/name/filename
-				current_f_path = solve_dir .. "/" .. p_name .. "/" .. f_name
+			-- 反向遍历每对 (from, to), 执行 to → from
+			local failed = false
+			for i = #parts, 1, -2 do
+				local from = parts[i - 1] -- 原始位置
+				local to = parts[i] -- 当前位置
+				-- 确保目标目录存在
+				ensure_dir(vim.fn.fnamemodify(from, ":h"))
+				-- 检查源是否存在
+				if not utils.file_exists(to) and vim.fn.isdirectory(to) == 0 then
+					log("WARN", "solve_back", "Path not found: " .. to .. ", skipping entry")
+					failed = true
+					break
+				end
+				local ok, err = uv.fs_rename(to, from)
+				if not ok then
+					log("ERROR", "solve_back", "Restore failed: " .. to .. " → " .. from .. " (" .. (err or "") .. ")")
+					failed = true
+					break
+				end
+				-- 记录第一个还原的源文件路径用于 auto_open
+				if not restored_path and i == 2 then
+					restored_path = from
+				end
 			end
 
-			if not utils.file_exists(current_f_path) then
-				table.remove(lines)
-			else
-				-- 1. 还原
-				local original_dir = vim.fn.fnamemodify(f_path, ":h")
-				ensure_dir(original_dir)
-
-				if p_name and p_name ~= "" then
-					-- 有数据: 先还原整个数据文件夹, 再抽出源文件
-					local current_p_dir = solve_dir .. "/" .. p_name
-					local target_p_dir = data_dir .. "/" .. p_name
-					ensure_dir(vim.fn.fnamemodify(target_p_dir, ":h"))
-
-					-- 先移出源文件到原始位置
-					local ok, err = uv.fs_rename(current_f_path, f_path)
-					if not ok then
-						log("ERROR", "solve_back", "Restore source failed: " .. (err or ""))
-						return
-					end
-
-					-- 再还原数据文件夹(无源文件的数据文件夹)
-					if vim.fn.isdirectory(current_p_dir) == 1 then
-						ensure_dir(vim.fn.fnamemodify(target_p_dir, ":h"))
-						uv.fs_rename(current_p_dir, target_p_dir)
-					end
-				else
-					-- 无数据: 直接还原源文件
-					local ok, err = uv.fs_rename(current_f_path, f_path)
-					if not ok then
-						log("ERROR", "solve_back", "Restore source failed: " .. (err or ""))
-						return
-					end
-				end
-
-				-- 2. 清理历史
-				table.remove(lines)
-				if #lines == 0 then
-					uv.fs_unlink(history_path)
-				else
-					write_lines(history_path, lines)
-				end
-
-				if M.config.auto_open then
-					vim.cmd("edit " .. vim.fn.fnameescape(f_path))
-					vim.api.nvim_win_set_cursor(0, { 1, 0 })
-				end
-
-				log("INFO", "solve_back", "Restored: " .. f_name)
-				notify.show("Restored: " .. f_name, "DONE")
+			if failed then
+				-- 终止本次撤销, 保留该行以便重试
+				log("WARN", "solve_back", "Undo incomplete, history preserved")
 				return
 			end
+
+			table.remove(lines)
 		end
 	end
 
-	if #lines == 0 and vim.fn.filereadable(history_path) == 1 then
+	-- 写入清理后的 history
+	if #lines == 0 then
 		uv.fs_unlink(history_path)
+	else
+		write_lines(history_path, lines)
 	end
-	log("INFO", "solve_back", "History empty")
+
+	if restored_path and M.config.auto_open then
+		vim.cmd("edit " .. vim.fn.fnameescape(restored_path))
+		vim.api.nvim_win_set_cursor(0, { 1, 0 })
+		notify.show("Restored: " .. vim.fn.fnamemodify(restored_path, ":t"), "DONE")
+		log("INFO", "solve_back", "Restored: " .. restored_path)
+	elseif not restored_path then
+		log("INFO", "solve_back", "History empty or all entries corrupted")
+	end
 end
 
 return M
