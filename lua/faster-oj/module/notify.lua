@@ -19,6 +19,9 @@ local hide_timer = nil
 ---@type uv_timer|nil spin_timer
 local spin_timer = nil
 
+---@type timeout|nil timeout
+local timeout = 1000
+
 local SPIN_CHARS = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
 local ICONS = {
 	INFO = "●",
@@ -128,7 +131,7 @@ end
 ---@param duration? integer 自动隐藏毫秒数 (默认 3000)
 function M.show(msg, level, duration)
 	level = level or "INFO"
-	duration = duration or 3000
+	duration = duration or timeout
 
 	vim.schedule(function()
 		setup_highlights()
@@ -203,7 +206,7 @@ function M.spinner_done(spinner, msg)
 		-- 自动关闭
 		safe_stop(hide_timer)
 		hide_timer = uv.new_timer()
-		hide_timer:start(3000, 0, function()
+		hide_timer:start(timeout, 0, function()
 			vim.schedule(close_win)
 			safe_stop(hide_timer)
 			hide_timer = nil

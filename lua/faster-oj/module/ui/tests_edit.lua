@@ -2,6 +2,7 @@
 
 local utils = require("faster-oj.module.utils")
 local ui = require("faster-oj.module.ui")
+local notify = require("faster-oj.module.notify")
 
 local M = {}
 local GROUP = "EditUI"
@@ -136,7 +137,7 @@ function M.save()
 			vim.bo[buf].modified = false
 		end
 	end
-	vim.notify("[FOJ] Saved", vim.log.levels.INFO)
+	notify.show("Problem data saved", "INFO")
 	log("INFO", "save", "Saved to " .. M.state.problem_dir)
 end
 
