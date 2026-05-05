@@ -98,7 +98,7 @@ local function update_win(text, hl_group, width)
 	vim.api.nvim_buf_clear_namespace(buf_id, ns, 0, -1)
 	vim.api.nvim_buf_add_highlight(buf_id, ns, hl_group, 0, 0, -1)
 
-	local config = get_win_config(width or #text + 1)
+	local config = get_win_config(width or #text)
 	if config.width then
 		if win_id and vim.api.nvim_win_is_valid(win_id) then
 			vim.api.nvim_win_set_config(win_id, config)
@@ -142,7 +142,7 @@ function M.show(msg, level, duration)
 			DONE = "FOJNotifyDone",
 		}
 
-		update_win(text, hl_map[level] or "FOJNotifyInfo", #text + 1)
+		update_win(text, hl_map[level] or "FOJNotifyInfo", #text)
 
 		-- 自动隐藏
 		safe_stop(hide_timer)
@@ -171,7 +171,7 @@ function M.spinner_start(msg)
 			end
 			s.spin_idx = s.spin_idx % #SPIN_CHARS + 1
 			local text = string.format(" %s %s", SPIN_CHARS[s.spin_idx], s.prefix)
-			update_win(text, "FOJNotifySpin", #text + 1)
+			update_win(text, "FOJNotifySpin", #text)
 		end)
 	end)
 
@@ -199,7 +199,7 @@ function M.spinner_done(spinner, msg)
 
 	local text = string.format(" %s %s", ICONS.DONE, msg or spinner.prefix)
 	vim.schedule(function()
-		update_win(text, "FOJNotifyDone", #text + 1)
+		update_win(text, "FOJNotifyDone", #text)
 		-- 自动关闭
 		safe_stop(hide_timer)
 		hide_timer = uv.new_timer()
@@ -223,7 +223,7 @@ function M.spinner_fail(spinner, msg)
 
 	local text = string.format(" %s %s", ICONS.ERROR, msg or spinner.prefix)
 	vim.schedule(function()
-		update_win(text, "FOJNotifyError", #text + 1)
+		update_win(text, "FOJNotifyError", #text)
 		safe_stop(hide_timer)
 		hide_timer = uv.new_timer()
 		hide_timer:start(5000, 0, function()

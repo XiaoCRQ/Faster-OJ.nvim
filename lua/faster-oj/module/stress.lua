@@ -371,16 +371,19 @@ function M.stress(opts)
 
 			-- 数据源: 缺失时尝试从 correct/test 的题目目录加载
 			if not opts.data then
-				local function try_load_data(path)
-					local name = vim.fn.fnamemodify(path, ":t:r")
-					local dir = M.config.data_dir .. "/" .. name
-					if vim.fn.isdirectory(dir) == 0 then return nil end
+				-- 尝试从 correct/test 的题目数据目录自动加载
+				local function try_load_data(src_path)
+					local dir = utils.get_problem_dir_from(src_path)
+					if dir == "" or not utils.dir_exists(dir) then return nil end
+					local tc_count = utils.get_test_count(dir)
+					if tc_count == 0 then return nil end
 					local inputs = {}
-					for i = 0, utils.get_test_count(dir) - 1 do
+					local name = vim.fn.fnamemodify(src_path, ":t:r")
+					for i = 0, tc_count - 1 do
 						local tc = utils.read_test_case(dir, i)
 						table.insert(inputs, { input = tc.input, label = name .. "/" .. i .. ".in" })
 					end
-					return #inputs > 0 and inputs or nil
+					return inputs
 				end
 				local inputs = try_load_data(correct_path) or try_load_data(test_path)
 				after_data(inputs or { { input = "", label = "(empty)" } })

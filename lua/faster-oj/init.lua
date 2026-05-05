@@ -109,11 +109,11 @@ function M.setup(opts)
 			-- data= 含 2 个捕获组 (type 和 raw_value), 值可含空格/\n
 			local opts = {}
 			-- 提取 data= (贪婪到行尾, 2 捕获组: type 和值)
-			local dk, dv = sub:match("data=([%w_]+):(.+)$")
+			local dk, dv = sub:match("data=([%w_]+):(.*)$")
 			if dk then
 				dv = dv:gsub("\\n", "\n")
 				opts.data = { type = dk, data = dv }
-				sub = sub:gsub("%s*data=[%w_]+:.+$", "")
+				sub = sub:gsub("%s*data=[%w_]+:.*$", "")
 			end
 			-- 解析 correct=/test= (值可为空, %S* 允许 find: 无后续字符)
 			for key, tv, val in sub:gmatch("(%w+)=([%w_]+):(%S*)") do
