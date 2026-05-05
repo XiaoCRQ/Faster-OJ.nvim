@@ -76,7 +76,7 @@ M.config = {
 
 	work_dir = "", -- Work directory
 	temp_dir = ".temp", -- Temporary files directory (stress data, submit temp, etc.)
-	json_dir = ".problem", -- Problem data directory
+	data_dir = ".problem", -- Problem data directory
 	solve_dir = ".solve", -- Solve Problem data directory
 	template_dir = "", -- Template data directory
 	template_default = "",

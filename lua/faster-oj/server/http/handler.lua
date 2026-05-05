@@ -38,14 +38,14 @@ end
 ---@param cfg table 插件配置
 function M.handle(json, cfg)
 	M.config = cfg
-	local json_dir = M.config.json_dir
+	local data_dir = M.config.data_dir
 
-	if not json_dir or json_dir == "" then
-		log("ERROR", "handle", "json_dir not configured")
+	if not data_dir or data_dir == "" then
+		log("ERROR", "handle", "data_dir not configured")
 		return
 	end
 
-	vim.fn.mkdir(json_dir, "p")
+	vim.fn.mkdir(data_dir, "p")
 
 	if not json.name then
 		log("ERROR", "handle", "Missing json.name")
@@ -53,7 +53,7 @@ function M.handle(json, cfg)
 	end
 
 	local tests = json.tests or {}
-	local problem_dir = json_dir .. "/" .. json.name
+	local problem_dir = data_dir .. "/" .. json.name
 	vim.fn.mkdir(problem_dir, "p")
 
 	-- 写入 problem.json

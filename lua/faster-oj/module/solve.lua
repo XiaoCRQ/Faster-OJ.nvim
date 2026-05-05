@@ -75,7 +75,7 @@ function M.solve()
 	end
 
 	local solve_dir = M.config.solve_dir
-	local json_dir = M.config.json_dir
+	local data_dir = M.config.data_dir
 	ensure_dir(solve_dir)
 
 	local filename = vim.fn.fnamemodify(file_path, ":t")
@@ -94,7 +94,7 @@ function M.solve()
 	vim.cmd("bd!")
 
 	-- 2. 移动题目文件夹
-	local problem_dir = json_dir .. "/" .. problem_name
+	local problem_dir = data_dir .. "/" .. problem_name
 	local problem_target = solve_dir .. "/" .. problem_name
 	local has_problem_dir = vim.fn.isdirectory(problem_dir) == 1
 
@@ -136,7 +136,7 @@ function M.solve_back()
 	end
 
 	local solve_dir = M.config.solve_dir
-	local json_dir = M.config.json_dir
+	local data_dir = M.config.data_dir
 	local history_path = solve_dir .. "/.history"
 
 	if vim.fn.filereadable(history_path) == 0 then

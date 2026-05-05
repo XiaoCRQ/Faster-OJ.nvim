@@ -176,7 +176,7 @@ function M.find(sub)
 		path = M.config.work_dir
 		picker_title = "Problem Files"
 	elseif sub == "data" then
-		path = M.config.json_dir
+		path = M.config.data_dir
 		picker_title = "Problem Data"
 	else
 		return

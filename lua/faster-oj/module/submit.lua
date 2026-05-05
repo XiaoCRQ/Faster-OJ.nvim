@@ -24,7 +24,7 @@ end
 ---@param ws table
 ---@param submit_data table
 local function finalize_submission(ws, submit_data)
-	local temp_path = M.config.json_dir .. "/temp.json"
+	local temp_path = M.config.data_dir .. "/temp.json"
 
 	if M.config.clipboard_submit and submit_data.code ~= "" then
 		vim.fn.setreg("+", submit_data.code)

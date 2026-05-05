@@ -72,8 +72,8 @@ function M.get_problem_dir_from(file_path)
 		return ""
 	end
 	local filename = vim.fn.fnamemodify(file_path, ":t:r")
-	local json_dir = M.config.json_dir or vim.fn.stdpath("data") .. "/faster-oj"
-	return vim.fn.fnamemodify(json_dir .. "/" .. filename .. "/", ":p")
+	local data_dir = M.config.data_dir or vim.fn.stdpath("data") .. "/faster-oj"
+	return vim.fn.fnamemodify(data_dir .. "/" .. filename .. "/", ":p")
 end
 
 ---获取题目目录路径 (从当前缓冲区)
