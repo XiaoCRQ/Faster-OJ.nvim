@@ -61,6 +61,10 @@
 
 local M = {}
 
+-- Get the plugin root directory (3 levels up from this file: default.lua -> faster-oj -> lua)
+local plugin_root = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h:h")
+local cache_base = plugin_root .. ".cache"
+
 ---@type FOJ.Config
 M.config = {
 
@@ -74,11 +78,11 @@ M.config = {
 	debug = false, -- Debug mode
 	server_mod = "all", -- "http" | "ws" | "all"
 
-	work_dir = "", -- Work directory
-	temp_dir = ".temp", -- Temporary files directory (stress data, submit temp, etc.)
-	data_dir = ".problem", -- Problem data directory
-	solve_dir = ".solve", -- Solve Problem data directory
-	template_dir = "", -- Template data directory
+	work_dir = cache_base, -- Work directory
+	temp_dir = cache_base .. "/.temp", -- Temporary files directory (stress data, submit temp, etc.)
+	data_dir = cache_base .. "/.problem", -- Problem data directory
+	solve_dir = cache_base .. "/.solve", -- Solve Problem data directory
+	template_dir = cache_base .. "/template", -- Template data directory
 	template_default = "",
 	template_default_ext = ".cpp",
 	auto_open = true,
