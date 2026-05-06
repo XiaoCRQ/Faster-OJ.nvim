@@ -41,7 +41,7 @@ local function pick_file(dir, title, cb)
 		return
 	end
 	vim.ui.select(file_list, { prompt = title }, function(choice)
-		cb(choice)
+		cb(choice or false)
 	end)
 end
 
@@ -56,19 +56,23 @@ local function pick_files(dir, cb)
 				table.insert(file_list, f)
 			end
 		end
-		vim.ui.select(file_list, {
-			prompt = "Select data files (" .. #selected .. " selected) - [Done] to finish",
-		}, function(choice)
-			if not choice or choice == "[Done]" then
-				cb(#selected > 0 and selected or nil)
-				return
-			end
-			table.insert(selected, choice)
-			pick_next()
-		end)
+			vim.ui.select(file_list, {
+				prompt = "Select data files (" .. #selected .. " selected) - [Done] to finish",
+			}, function(choice)
+				if not choice then
+					cb(false)
+					return
+				end
+				if choice == "[Done]" then
+					cb(#selected > 0 and selected or nil)
+					return
+				end
+				table.insert(selected, choice)
+				pick_next()
+			end)
+		end
+		pick_next()
 	end
-	pick_next()
-end
 
 -- ── Source resolvers ────────────────────────────────────
 
@@ -121,10 +125,14 @@ local function resolve_data(source, cb)
 		local dir = (source.data and source.data ~= "") and source.data or vim.fn.getcwd()
 		vim.schedule(function()
 			pick_files(dir, function(paths)
-			if not paths then
-				cb(nil)
-				return
-			end
+				if paths == false then
+					cb(false)
+					return
+				end
+				if not paths then
+					cb(nil)
+					return
+				end
 			local inputs = {}
 			for _, p in ipairs(paths) do
 				local content = utils.read_file(p) or ""
@@ -249,6 +257,10 @@ function M.stress(opts)
 	local spin = notify.spinner_start("Setting up stress test ...")
 
 	resolve_code(opts.correct, "Select correct code", function(correct_path)
+		if correct_path == false then
+			notify.spinner_fail(spin, "Cancelled")
+			return
+		end
 		if not correct_path then
 			notify.spinner_fail(spin, "Correct code not resolved")
 			return
@@ -256,6 +268,10 @@ function M.stress(opts)
 		log("INFO", "stress", "Correct code: " .. correct_path)
 
 		resolve_code(opts.test, "Select test code", function(test_path)
+			if test_path == false then
+				notify.spinner_fail(spin, "Cancelled")
+				return
+			end
 			if not test_path then
 				notify.spinner_fail(spin, "Test code not resolved")
 				return
@@ -264,6 +280,10 @@ function M.stress(opts)
 
 			-- 数据就绪后的后续流程
 			local function after_data(inputs)
+				if inputs == false then
+					notify.spinner_fail(spin, "Cancelled")
+					return
+				end
 				if not inputs or #inputs == 0 then
 					notify.spinner_fail(spin, "No data sources")
 					return

@@ -181,7 +181,8 @@ end
 ---异步等待浏览器连接
 ---@param timeout_s number 超时 (秒)
 ---@param callback fun(count:number)
-function M.wait_for_connection(timeout_s, callback)
+---@param on_timeout? fun()
+function M.wait_for_connection(timeout_s, callback, on_timeout)
 	if not M.is_open() then
 		log("WARN", "wait_for_connection", "Server not running")
 		return
@@ -211,6 +212,7 @@ function M.wait_for_connection(timeout_s, callback)
 			timer:stop()
 			timer:close()
 			log("WARN", "wait_for_connection", "Timed out")
+			if on_timeout then vim.schedule(on_timeout) end
 		end
 	end)
 end

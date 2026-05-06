@@ -42,6 +42,8 @@ local function finalize_submission(ws, submit_data)
 	ws.wait_for_connection(M.config.max_time_out, function()
 		ws.send("broadcast " .. temp_path)
 		notify.show("Submitted OK", "DONE")
+	end, function()
+		notify.show("No connection", "ERROR")
 	end)
 end
 
@@ -91,10 +93,7 @@ function M.submit(ws)
 	local cmd_cfg = M.config.code_obfuscator
 	local vars = utils.get_vars(file_path)
 
-	local should_obscure = cmd_cfg
-		and cmd_cfg.cmd
-		and cmd_cfg.cmd.exec ~= ""
-		and cmd_cfg.result ~= ""
+	local should_obscure = cmd_cfg and cmd_cfg.cmd and cmd_cfg.cmd.exec ~= "" and cmd_cfg.result ~= ""
 
 	if should_obscure then
 		local exec = utils.expand(cmd_cfg.cmd.exec, vars)
@@ -117,35 +116,31 @@ function M.submit(ws)
 		local stdout = uv.new_pipe(false)
 		local stderr = uv.new_pipe(false)
 
-		uv.spawn(
-			exec,
-			{ args = args, cwd = vars.DIR, hide = true, stdio = { nil, stdout, stderr } },
-			function(code)
-				stdout:read_stop()
-				stdout:close()
-				stderr:read_stop()
-				stderr:close()
+		uv.spawn(exec, { args = args, cwd = vars.DIR, hide = true, stdio = { nil, stdout, stderr } }, function(code)
+			stdout:read_stop()
+			stdout:close()
+			stderr:read_stop()
+			stderr:close()
 
-				if code ~= 0 then
-					log("ERROR", "submit", string.format("Obfuscation failed (code=%d)", code))
-					notify.spinner_fail(spin, "Obfuscation failed, submitting original")
+			if code ~= 0 then
+				log("ERROR", "submit", string.format("Obfuscation failed (code=%d)", code))
+				notify.spinner_fail(spin, "Obfuscation failed, submitting original")
+				submit_code(submit_data, file_path, ws)
+				return
+			end
+
+			vim.schedule(function()
+				submit_data.code = utils.read_file(result_path)
+				if not submit_data.code then
+					log("ERROR", "submit", "Failed to read obfuscated file: " .. result_path)
+					notify.spinner_fail(spin, "Obfuscation failed")
 					submit_code(submit_data, file_path, ws)
 					return
 				end
-
-				vim.schedule(function()
-					submit_data.code = utils.read_file(result_path)
-					if not submit_data.code then
-						log("ERROR", "submit", "Failed to read obfuscated file: " .. result_path)
-						notify.spinner_fail(spin, "Obfuscation failed")
-						submit_code(submit_data, file_path, ws)
-						return
-					end
-					notify.spinner_done(spin, "Obfuscated OK, submitting ...")
-					finalize_submission(ws, submit_data)
-				end)
-			end
-		)
+				notify.spinner_done(spin, "Obfuscated OK, submitting ...")
+				finalize_submission(ws, submit_data)
+			end)
+		end)
 
 		stdout:read_start(function(_, data)
 			if data then
