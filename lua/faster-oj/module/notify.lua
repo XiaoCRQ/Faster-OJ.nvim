@@ -97,6 +97,8 @@ end
 ---@param width integer 窗口宽度
 local function update_win(text, hl_group, width)
 	ensure_buf()
+	-- Sanitize: nvim_buf_set_lines rejects strings containing newlines
+	text = text:gsub("\n", " ")
 	vim.api.nvim_buf_set_lines(buf_id, 0, -1, false, { text })
 	vim.api.nvim_buf_clear_namespace(buf_id, ns, 0, -1)
 	vim.api.nvim_buf_add_highlight(buf_id, ns, hl_group, 0, 0, -1)

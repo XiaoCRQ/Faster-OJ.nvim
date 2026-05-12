@@ -80,7 +80,8 @@ function M.run(need_compile)
 				if compile_spin then
 					notify.spinner_fail(compile_spin, "Compilation FAILED")
 				end
-				notify.show("Compilation FAILED: " .. msg, "ERROR", 8000)
+				notify.show("Compilation FAILED", "ERROR")
+				vim.notify(msg or "", vim.log.levels.ERROR, { title = "Compilation Error" })
 				return
 			end
 
