@@ -22,6 +22,18 @@
 - **Stress Testing (对拍)**: Run two solutions against the same inputs — catch edge cases fast.
 - **Multi-Panel UI**: Judge results, test case editor with real-time sync, stress test viewer.
 - **Smart Finder**: Integrates with `snacks.nvim`, `telescope.nvim`, `fzf-lua`, `mini.pick`, or `vim.ui.select`.
+- **Robust Quoting**: Stress test arguments support three quoting styles — `"..."`, `'...'`, and C++ raw strings `R"(...)"` — for paths with spaces and special characters.
+
+---
+
+## 🚀 Recommended Workflow
+
+1. **Start services** — `:FOJ` launches HTTP + WebSocket servers
+2. **Fetch a problem** — Click a problem link in your browser; the [Competitive Companion](https://github.com/jmerle/competitive-companion) extension sends it to Neovim. A source file and test data are created automatically in `work_dir`
+3. **Write your solution** — Edit the generated file
+4. **Judge locally** — `<leader>cdt` compiles and runs all test cases. Results open in a multi-panel UI with side-by-side diff
+5. **Stress test (optional)** — `<leader>cdP` picks two solutions interactively, or specify paths: `:FOJ stress correct=path:"brute.cpp" test=path:"solve.cpp"`
+6. **Submit** — `<leader>cdr` sends the solution via WebSocket through the browser extension
 
 ---
 
@@ -155,11 +167,14 @@ map("n", "<leader>cdP", ":FOJ stress correct=find: test=find:<CR>",
 
 | Parameter | Type | Description |
 | --- | --- | --- |
-| `correct` | `path:FILE` or `find:` | Reference solution |
-| `test` | `path:FILE` or `find:` | Solution under test |
-| `data` | `path:P1\nP2` / `find:` / `data:RAW` | Input data (optional: auto-loads from correct/test problem dir) |
+| `correct` | `path:FILE` or `find:DIR` | Reference solution |
+| `test` | `path:FILE` or `find:DIR` | Solution under test |
+| `data` | `path:P1\nP2` / `find:DIR` / `data:RAW` | Input data (optional: auto-loads from correct/test problem dir) |
 | `time` | integer (ms) | Time limit per case (default: `default_time_limit`) |
 | `mem` | integer (MB) | Memory limit per case (default: `default_memory_limit`) |
+
+Values support three quoting styles for paths containing spaces or special characters:
+- Double quotes: `"..."` — single quotes: `'...'` — C++ raw string: `R"(...)"` / `R"delim(...)delim"`
 
 **Examples:**
 
@@ -167,11 +182,17 @@ map("n", "<leader>cdP", ":FOJ stress correct=find: test=find:<CR>",
 " Pick both files interactively (data auto-loaded from problem dirs)
 :FOJ stress correct=find: test=find:
 
-" Direct paths, different languages
+" Direct paths
 :FOJ stress correct=path:brute.py test=path:solve.cpp
 
-" With raw data
-:FOJ stress correct=path:a.cpp test=path:b.cpp data=data:5\n1 2 3 time=1000
+" Paths with spaces (quoted)
+:FOJ stress correct=path:"my brute.cpp" test=path:'solve.cpp'
+
+" C++ raw string quoting
+:FOJ stress correct=path:R"(brute.cpp)" test=path:R"(solve.cpp)"
+
+" With raw data and time/memory limits
+:FOJ stress correct=path:a.cpp test=path:b.cpp data=data:5\n1 2 3 time=1000 mem=512
 ```
 
 ---
@@ -182,10 +203,10 @@ map("n", "<leader>cdP", ":FOJ stress correct=find: test=find:<CR>",
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
-| `work_dir` | string | `""` | Base working directory |
-| `data_dir` | string | `".problem"` | Problem data directory |
-| `solve_dir` | string | `".solve"` | Solved problems archive |
-| `temp_dir` | string | `".temp"` | Temporary files |
+| `work_dir` | string | `vim.fn.stdpath("data") .. "/faster-oj"` | Base working directory |
+| `data_dir` | string | `".problem"` | Problem data directory (relative to `work_dir`) |
+| `solve_dir` | string | `".solve"` | Solved problems archive (relative to `work_dir`) |
+| `temp_dir` | string | `".temp"` | Temporary files (relative to `work_dir`) |
 | `template_dir` | string | `""` | Template directory |
 | `template_default` | string | `""` | Default template file |
 | `template_default_ext` | string | `".cpp"` | Fallback language extension |

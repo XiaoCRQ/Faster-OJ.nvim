@@ -2,7 +2,9 @@
 
 This file provides guidance to Claude Code when working in this repository.
 
-默认使用中文回答。
+**CLAUDE.md 内容必须使用英文编写。** 与用户对话时使用中文，但本文件（包括所有章节、注释、代码块内的描述文本）强制使用英文。
+
+All CLAUDE.md content MUST be written in English. User-facing conversation may use Chinese, but this file — including all sections, comments, and descriptive text within code blocks — must be in English.
 
 ## Project overview
 
@@ -130,9 +132,55 @@ Optional pre-processing before submission. All error paths fall back to original
 
 ### Stress command parser
 `:FOJ stress` parses `correct=type:val test=type:val [data=type:val] [time=N] [mem=N]`.
-- `data=` extracted greedily first (may contain spaces/`\n`)
-- `correct=` / `test=` use `(%S*)` for empty values (e.g., `find:`)
-- `\n` in data values decoded to actual newlines
+- Uses `parse_quoted_value()` with single left-to-right pass, supporting three quoting styles:
+  - Double quotes `"..."`
+  - Single quotes `'...'`
+  - C++ raw string `R"delim(...)delim"` (including custom delimiters)
+- `\n` / `\t` escape sequences in `data=` values are decoded to actual newlines/tabs
+- Unquoted `correct=` / `test=` values stop at whitespace; unquoted `data=` captures to end-of-line (backward compatible)
 
 ### Compilation output
 All compiled languages output binaries to `$(DIR)/.output/`. Directory auto-created before compilation. Script languages (py, js, ts, lua) have no compile step.
+
+## Development workflow
+
+Every change or feature addition must start from a descriptive git branch (`fix/<description>` or `feature/<description>`), then use the `feature-dev` skill to plan the implementation.
+
+### Work loop
+
+```
+┌── Loop start ──────────────────────────────────────────┐
+│                                                         │
+│  1. feature-dev skill analyzes codebase, produces plan  │
+│                                                         │
+│  2. After planning, ask user whether to apply changes   │
+│     ├── YES → modify code, wait for user testing        │
+│     └── NO/chat → wait for user input, return to start  │
+│                   or cancel the workflow                 │
+│                                                         │
+│  3. User reports defects / code errors                  │
+│     └── Return to plan mode, make targeted fixes        │
+│                                                         │
+│  4. User confirms tests pass                            │
+│     └── Call code-review to audit code                  │
+│     └── Ask user whether to merge branch                │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Git commit convention
+
+Use GitHub standard conventional commit format with detailed change descriptions:
+
+```
+<type>(<scope>): <brief description>
+
+<detailed description of changes, rationale, and scope of impact>
+
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+```
+
+- **type**: feat / fix / refactor / docs / chore
+- **scope**: module name affected (e.g. stress, run, submit, ui)
+- **brief description**: one-line summary of changes
+- **detailed description**: list specific changes, impact scope, backward compatibility notes

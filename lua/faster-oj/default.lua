@@ -61,9 +61,11 @@
 
 local M = {}
 
--- Get the plugin root directory (3 levels up from this file: default.lua -> faster-oj -> lua)
-local plugin_root = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h:h")
-local cache_base = plugin_root .. ".cache"
+-- Use Neovim standard data directory as the base path
+-- Linux: ~/.local/share/nvim/faster-oj
+-- macOS: ~/Library/Application Support/nvim/faster-oj
+-- Windows: ~/AppData/Local/nvim-data/faster-oj
+local cache_base = vim.fn.stdpath("data") .. "/faster-oj"
 
 ---@type FOJ.Config
 M.config = {

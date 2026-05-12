@@ -22,6 +22,18 @@
 - **对拍测试**：两份代码同输入对比输出，快速定位边界情况。
 - **多面板 UI**：判题结果查看、测试用例实时编辑、对拍结果展示。
 - **智能查找器**：集成 `snacks.nvim`、`telescope.nvim`、`fzf-lua`、`mini.pick` 及 `vim.ui.select`。
+- **健壮引号支持**：对拍参数支持三种引用风格 — `"..."`、`'...'` 及 C++ 原始字符串 `R"(...)"` — 处理含空格和特殊字符的路径。
+
+---
+
+## 🚀 推荐工作流
+
+1. **启动服务** — `:FOJ` 启动 HTTP + WebSocket 服务器
+2. **抓取题目** — 在浏览器中点击题目链接，[Competitive Companion](https://github.com/jmerle/competitive-companion) 插件会将题目发送至 Neovim，自动在 `work_dir` 下创建源文件和测试数据
+3. **编写解答** — 编辑生成的源文件
+4. **本地评测** — `<leader>cdt` 编译并运行所有测试用例，结果展示在多面板 UI 中，支持逐行/逐 token 对比
+5. **对拍测试（可选）** — `<leader>cdP` 交互选取两份代码，或直接指定路径：`:FOJ stress correct=path:"brute.cpp" test=path:"solve.cpp"`
+6. **提交** — `<leader>cdr` 通过 WebSocket 经浏览器插件提交代码
 
 ---
 
@@ -155,11 +167,14 @@ map("n", "<leader>cdP", ":FOJ stress correct=find: test=find:<CR>",
 
 | 参数 | 格式 | 说明 |
 | --- | --- | --- |
-| `correct` | `path:FILE` 或 `find:` | 标准程序 |
-| `test` | `path:FILE` 或 `find:` | 待测程序 |
-| `data` | `path:P1\nP2` / `find:` / `data:RAW` | 数据来源（可选：自动从 correct/test 题目目录加载） |
+| `correct` | `path:FILE` 或 `find:DIR` | 标准程序 |
+| `test` | `path:FILE` 或 `find:DIR` | 待测程序 |
+| `data` | `path:P1\nP2` / `find:DIR` / `data:RAW` | 数据来源（可选：自动从 correct/test 题目目录加载） |
 | `time` | 整数 (ms) | 时间限制（默认: `default_time_limit`） |
 | `mem` | 整数 (MB) | 内存限制（默认: `default_memory_limit`） |
+
+参数值支持三种引用风格，用于包含空格或特殊字符的路径：
+- 双引号 `"..."` — 单引号 `'...'` — C++ 原始字符串 `R"(...)"` / `R"delim(...)delim"`
 
 **示例：**
 
@@ -167,11 +182,17 @@ map("n", "<leader>cdP", ":FOJ stress correct=find: test=find:<CR>",
 " 交互选取两个文件（数据自动从题目目录加载）
 :FOJ stress correct=find: test=find:
 
-" 直接指定路径，支持不同语言
+" 直接指定路径
 :FOJ stress correct=path:brute.py test=path:solve.cpp
 
-" 含原始数据
-:FOJ stress correct=path:a.cpp test=path:b.cpp data=data:5\n1 2 3 time=1000
+" 路径含空格（使用引号）
+:FOJ stress correct=path:"my brute.cpp" test=path:'solve.cpp'
+
+" C++ 原始字符串引用
+:FOJ stress correct=path:R"(brute.cpp)" test=path:R"(solve.cpp)"
+
+" 含原始数据和时限/内存限制
+:FOJ stress correct=path:a.cpp test=path:b.cpp data=data:5\n1 2 3 time=1000 mem=512
 ```
 
 ---
@@ -182,10 +203,10 @@ map("n", "<leader>cdP", ":FOJ stress correct=find: test=find:<CR>",
 
 | 参数 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `work_dir` | string | `""` | 工作目录 |
-| `data_dir` | string | `".problem"` | 题目数据目录 |
-| `solve_dir` | string | `".solve"` | 已解决题目归档 |
-| `temp_dir` | string | `".temp"` | 临时文件目录 |
+| `work_dir` | string | `vim.fn.stdpath("data") .. "/faster-oj"` | 工作目录 |
+| `data_dir` | string | `".problem"` | 题目数据目录（相对 `work_dir`） |
+| `solve_dir` | string | `".solve"` | 已解决题目归档（相对 `work_dir`） |
+| `temp_dir` | string | `".temp"` | 临时文件目录（相对 `work_dir`） |
 | `template_dir` | string | `""` | 模板目录 |
 | `template_default` | string | `""` | 默认模板文件 |
 | `template_default_ext` | string | `".cpp"` | 默认语言扩展名 |
