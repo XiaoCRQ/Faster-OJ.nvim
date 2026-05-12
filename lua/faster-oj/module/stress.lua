@@ -107,7 +107,8 @@ local function resolve_data(source, cb)
 		return
 	end
 	if source.type == "path" then
-		local paths = vim.split(source.data, "\n", { trimempty = true })
+		local normalized = source.data:gsub("\t", "\n")
+		local paths = vim.split(normalized, "\n", { trimempty = true })
 		local inputs = {}
 		for _, p in ipairs(paths) do
 			if utils.file_exists(p) then

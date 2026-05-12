@@ -57,6 +57,56 @@ function M.setup(opts)
 	ws_server.setup(M.config)
 	http_server.setup(M.config)
 
+	--- 解析引用值: 支持 "...", '...', R"(...)", R"delim(...)delim"
+	---@param str string
+	---@param pos number
+	---@param opts table|nil { eol = boolean }
+	---@return string value
+	---@return number next_pos
+	local function parse_quoted_value(str, pos, opts)
+		opts = opts or {}
+		if pos > #str then
+			return "", pos
+		end
+		local ch = str:sub(pos, pos)
+
+		if ch == '"' or ch == "'" then
+			local close = str:find(ch, pos + 1)
+			if close then
+				return str:sub(pos + 1, close - 1), close + 1
+			end
+			return str:sub(pos + 1), #str + 1
+		end
+
+		if str:sub(pos, pos + 1) == 'R"' then
+			local lparen = str:find("(", pos + 2, true)
+			if not lparen then
+				local sp = str:find("%s", pos)
+				if sp then
+					return str:sub(pos, sp - 1), sp
+				end
+				return str:sub(pos), #str + 1
+			end
+			local delim = str:sub(pos + 2, lparen - 1)
+			local closer = ")" .. delim .. '"'
+			local close = str:find(closer, lparen + 1, true)
+			if close then
+				return str:sub(lparen + 1, close - 1), close + #closer
+			end
+			return str:sub(lparen + 1), #str + 1
+		end
+
+		if opts.eol then
+			return str:sub(pos), #str + 1
+		else
+			local sp = str:find("%s", pos)
+			if sp then
+				return str:sub(pos, sp - 1), sp
+			end
+			return str:sub(pos), #str + 1
+		end
+	end
+
 	local actions = {
 		start = function(sub)
 			M.start(sub)
@@ -104,31 +154,45 @@ function M.setup(opts)
 			if not sub or sub == "" then
 				return module.stress()
 			end
-			-- 解析: correct=type:val test=type:val [data=type:raw...] [time=N] [mem=N]
-			-- type: path | find | data
-			-- data= 含 2 个捕获组 (type 和 raw_value), 值可含空格/\n
+
 			local opts = {}
-			-- 提取 data= (贪婪到行尾, 2 捕获组: type 和值)
-			local dk, dv = sub:match("data=([%w_]+):(.*)$")
-			if dk then
-				dv = dv:gsub("\\n", "\n")
-				opts.data = { type = dk, data = dv }
-				sub = sub:gsub("%s*data=[%w_]+:.*$", "")
-			end
-			-- 解析 correct=/test= (值可为空, %S* 允许 find: 无后续字符)
-			for key, tv, val in sub:gmatch("(%w+)=([%w_]+):(%S*)") do
-				if key == "correct" or key == "test" then
-					opts[key] = { type = tv, data = val }
+			local i = 1
+			while i <= #sub do
+				i = sub:find("%S", i)
+				if not i then break end
+
+				local ks, key, typ, after_colon = sub:match("^()(%w+)=([%w_]+):()", i)
+				if ks then
+					i = after_colon
+					if key == "correct" or key == "test" then
+						local val, next_pos = parse_quoted_value(sub, i, { eol = false })
+						opts[key] = { type = typ, data = val }
+						i = next_pos
+					elseif key == "data" then
+						local val, next_pos = parse_quoted_value(sub, i, { eol = true })
+						val = val:gsub("\\n", "\n"):gsub("\\t", "\t")
+						opts.data = { type = typ, data = val }
+						i = next_pos
+					else
+						local sp = sub:find("%s", i)
+						i = sp or (#sub + 1)
+					end
+				else
+					local tl = sub:match("^time=(%d+)", i)
+					if tl then
+						opts.timeLimit = tonumber(tl)
+						i = i + 5 + #tl
+					else
+						local ml = sub:match("^mem=(%d+)", i)
+						if ml then
+							opts.memoryLimit = tonumber(ml)
+							i = i + 4 + #ml
+						else
+							local sp = sub:find("%s", i)
+							i = sp or (#sub + 1)
+						end
+					end
 				end
-			end
-			-- time=N, mem=N
-			local tl = sub:match("time=(%d+)")
-			local ml = sub:match("mem=(%d+)")
-			if tl then
-				opts.timeLimit = tonumber(tl)
-			end
-			if ml then
-				opts.memoryLimit = tonumber(ml)
 			end
 			module.stress(opts)
 		end,
@@ -136,6 +200,7 @@ function M.setup(opts)
 
 	vim.api.nvim_create_user_command("FOJ", function(params)
 		local raw = params.args or ""
+		log("INFO", "FOJ", "raw args: [" .. raw .. "]")
 
 		if raw == "" then
 			if M.config.work_dir then
