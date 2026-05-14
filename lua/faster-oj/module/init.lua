@@ -20,39 +20,6 @@ local notify = require("faster-oj.module.notify")
 ---@field last_session string|nil
 local M = {}
 
--- Track last opened viewer for :FOJ show (no args) reopen
-M._open_counter = 0
-M._open_times = {} ---@type table<string, number>
-M._last_closed = nil ---@type {viewer:string, style:string}|nil
-
----Record that a viewer just opened
----@param viewer string
----@param style string
-local function record_open(viewer, style)
-	M._open_counter = M._open_counter + 1
-	M._open_times[viewer] = M._open_counter
-	M._last_closed = nil -- manual open breaks the reopen chain
-end
-
----Find the currently open viewer with the highest open time (last opened)
----@return {viewer:string, style:string}|nil
-local function last_opened()
-	local best, best_time = nil, 0
-	if ui.is_open() and M._open_times.tests and M._open_times.tests > best_time then
-		best = { viewer = "tests", style = ui.current_style or "float" }
-		best_time = M._open_times.tests
-	end
-	if edit.is_open() and M._open_times.edit and M._open_times.edit > best_time then
-		best = { viewer = "edit", style = edit.current_style or "float" }
-		best_time = M._open_times.edit
-	end
-	if stress_ui.is_open() and M._open_times.stress and M._open_times.stress > best_time then
-		best = { viewer = "stress", style = stress_ui.current_style or "float" }
-		best_time = M._open_times.stress
-	end
-	return best
-end
-
 ---@param level string
 ---@param func string
 ---@param msg string
@@ -149,7 +116,6 @@ function M.run(need_compile)
 			end
 			if finished == test_count then
 				M.last_session = "tests"
-				record_open("tests", ui.current_style or "float")
 				log("INFO", "run", string.format("All done: %d/%d AC", ac_count, finished))
 				local total = test_count
 				if ac_count == total then
@@ -164,9 +130,14 @@ end
 
 -- ── Unified show ─────────────────────────────────────────
 
+---Returns true if any UI window is currently open (any viewer, any style).
+local function any_open()
+	return ui.is_open() or edit.is_open() or stress_ui.is_open()
+end
+
 --- Show/toggle/switch windows.
 --- ctrl: "test"|"edit"|"stress" [float|split]
----   nil / ""         -> open last session; no history -> no-op
+---   nil / ""         -> close all if any open, else reopen last session
 ---   "test"           -> toggle test viewer (default_style)
 ---   "test float"     -> show test viewer in float style
 ---   "test split"     -> show test viewer in split style
@@ -205,11 +176,9 @@ function M.show(ctrl)
 		end
 		if edit.is_open() then
 			edit.close()
-			M.last_session = nil
 		else
 			edit.edit()
 			M.last_session = "edit"
-			record_open("edit", edit.current_style or "float")
 		end
 	elseif viewer == "stress" then
 		if style then
@@ -217,99 +186,39 @@ function M.show(ctrl)
 		end
 		if stress_ui.is_open() then
 			stress_ui.close()
-			M.last_session = nil
 		else
 			if stress_ui.state and stress_ui.state.size and stress_ui.state.size > 0 then
 				stress_ui.show()
 				M.last_session = "stress"
-				record_open("stress", stress_ui.current_style or "float")
+			end
+		end
+	elseif viewer == "tests" then
+		if style then
+			ui.current_style = style
+		end
+		if ui.is_open() then
+			ui.close()
+		else
+			ui.show()
+			if ui.is_open() then
+				M.last_session = "tests"
 			end
 		end
 	else
-		-- tests or nil/"" (last session)
-		if not viewer then
-			-- No args: close all or reopen last closed
-			local last = last_opened()
-			if last then
-				ui_engine.close("TestUI")
-				ui_engine.close("EditUI")
-				ui_engine.close("StressUI")
-				M._open_times = {}
-				M._last_closed = last
-				M.last_session = nil
-			elseif M._last_closed then
-				local entry = M._last_closed
-				M._last_closed = nil
-				if entry.viewer == "tests" then
-					ui.current_style = entry.style
-					ui.show()
-					if ui.is_open() then
-						M.last_session = "tests"
-						record_open("tests", entry.style)
-					end
-				elseif entry.viewer == "edit" then
-					edit.current_style = entry.style
-					edit.edit()
-					if edit.is_open() then
-						M.last_session = "edit"
-						record_open("edit", entry.style)
-					end
-				elseif entry.viewer == "stress" then
-					stress_ui.current_style = entry.style
-					if stress_ui.state and stress_ui.state.size and stress_ui.state.size > 0 then
-						stress_ui.show()
-						if stress_ui.is_open() then
-							M.last_session = "stress"
-							record_open("stress", entry.style)
-						end
-					end
-				end
-			end
+		-- nil / "" : close all if any open, else reopen last session
+		if any_open() then
+			M.close()
 			return
 		end
-
-		local target_viewer = viewer or M.last_session
-
-		if target_viewer == "tests" then
-			if style then
-				ui.current_style = style
-			end
-			if ui.is_open() then
-				ui.close()
-				M.last_session = nil
-			else
-				ui.show()
-				if ui.is_open() then
-					M.last_session = "tests"
-					record_open("tests", ui.current_style or "float")
-				end
-			end
-		elseif target_viewer == "edit" then
-			if style then
-				edit.current_style = style
-			end
-			if edit.is_open() then
-				edit.close()
-				M.last_session = nil
-			else
-				edit.edit()
-				M.last_session = "edit"
-				record_open("edit", edit.current_style or "float")
-			end
-		elseif target_viewer == "stress" then
-			if style then
-				stress_ui.current_style = style
-			end
-			if stress_ui.is_open() then
-				stress_ui.close()
-				M.last_session = nil
-			else
-				if stress_ui.state and stress_ui.state.size and stress_ui.state.size > 0 then
-					stress_ui.show()
-					M.last_session = "stress"
-					record_open("stress", stress_ui.current_style or "float")
-				end
-			end
+		if not M.last_session then
+			return
+		end
+		if M.last_session == "tests" then
+			ui.show()
+		elseif M.last_session == "edit" then
+			edit.edit()
+		elseif M.last_session == "stress" then
+			stress_ui.show()
 		end
 	end
 end
@@ -329,26 +238,14 @@ function M.close(ctrl)
 		ui_engine.close("TestUI")
 		ui_engine.close("EditUI")
 		ui_engine.close("StressUI")
-		M.last_session = nil
-		M._open_times = {}
-		M._last_closed = nil
 	else
 		local sub = ctrl:lower()
 		if sub == "test" then
 			ui_engine.close("TestUI")
-			if M.last_session == "tests" then
-				M.last_session = nil
-			end
 		elseif sub == "edit" then
 			ui_engine.close("EditUI")
-			if M.last_session == "edit" then
-				M.last_session = nil
-			end
 		elseif sub == "stress" then
 			ui_engine.close("StressUI")
-			if M.last_session == "stress" then
-				M.last_session = nil
-			end
 		end
 	end
 end
@@ -357,7 +254,6 @@ end
 function M.stress(opts)
 	stress_mod.stress(opts)
 	M.last_session = "stress"
-	record_open("stress", stress_ui.current_style or "float")
 end
 
 function M.erase()
