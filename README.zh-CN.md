@@ -20,7 +20,7 @@
 - **全自动工作流**：配合 [Competitive Companion](https://github.com/jmerle/competitive-companion) 抓题，利用 [Faster-OJ 浏览器插件](https://github.com/XiaoCRQ/Faster-OJ) 一键提交。
 - **本地评测**：并发执行测试用例，时间/内存测量。词法模糊匹配 (`obscure`) 与内存偏移补偿。
 - **对拍测试**：两份代码同输入对比输出，快速定位边界情况。
-- **多面板 UI**：判题结果查看、测试用例实时编辑、对拍结果展示。
+- **双风格 UI**：浮动窗口（float）与原生化分屏（split）双模式，按 `f` 一键切换。
 - **智能查找器**：集成 `snacks.nvim`、`telescope.nvim`、`fzf-lua`、`mini.pick` 及 `vim.ui.select`。
 - **健壮引号支持**：对拍参数支持三种引用风格 — `"..."`、`'...'` 及 C++ 原始字符串 `R"(...)"` — 处理含空格和特殊字符的路径。
 
@@ -95,8 +95,10 @@ map("n", "<leader>cdr", ":FOJ submit<CR>",       vim.tbl_extend("force", opts, {
 -- 评测与 UI
 map("n", "<leader>cdt", ":FOJ run<CR>",          vim.tbl_extend("force", opts, { desc = "FOJ: Compile and judge" }))
 map("n", "<leader>cdT", ":FOJ test<CR>",         vim.tbl_extend("force", opts, { desc = "FOJ: Judge only (skip compile)" }))
-map("n", "<leader>cdu", ":FOJ show<CR>",         vim.tbl_extend("force", opts, { desc = "FOJ: Toggle judge UI" }))
-map("n", "<leader>cde", ":FOJ edit<CR>",         vim.tbl_extend("force", opts, { desc = "FOJ: Edit test cases" }))
+map("n", "<leader>cdu", ":FOJ show<CR>",         vim.tbl_extend("force", opts, { desc = "FOJ: 打开上次会话" }))
+map("n", "<leader>cdU", ":FOJ show test split<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: 分屏显示测试" }))
+map("n", "<leader>cde", ":FOJ show edit<CR>",    vim.tbl_extend("force", opts, { desc = "FOJ: 切换测试编辑器" }))
+map("n", "<leader>cdC", ":FOJ close<CR>",         vim.tbl_extend("force", opts, { desc = "FOJ: 关闭所有 UI 窗口" }))
 
 -- 数据管理
 map("n", "<leader>cds", ":FOJ solve<CR>",        vim.tbl_extend("force", opts, { desc = "FOJ: Mark as solved" }))
@@ -125,14 +127,31 @@ map("n", "<leader>cdP", ":FOJ stress correct=find: test=find:<CR>",
 | `:FOJ start [mod]` | 启动指定模式: `all` / `http` / `ws` |
 | `:FOJ stop [mod]` | 停止服务 |
 
-### 评测
+### 评测与 UI
 
 | 命令 | 说明 |
 | --- | --- |
 | `:FOJ run` | 保存、编译并运行全部测试用例 |
 | `:FOJ test` | 运行测试用例（跳过编译） |
-| `:FOJ show` | 切换判题结果 UI |
-| `:FOJ edit` | 切换测试用例编辑器（增删改） |
+| `:FOJ show [sub1] [sub2]` | 打开上次会话或切换指定 UI（见下表） |
+| `:FOJ close [sub]` | 关闭 UI 窗口（无参 = 全部关闭） |
+| `:FOJ edit` | 切换测试用例编辑器（等价 `:FOJ show edit`） |
+
+`show` 参数：
+
+| `sub1` | `sub2`（可选） | 行为 |
+| --- | --- | --- |
+| *(无)* | — | 打开最近活跃的会话；无历史则不操作 |
+| `test` | — | 切换测试查看器（默认风格） |
+| `test` | `float` / `split` | 测试查看器指定风格 |
+| `edit` | — | 切换测试用例编辑器（默认风格） |
+| `edit` | `float` / `split` | 编辑器指定风格 |
+| `stress` | — | 切换对拍查看器（如有历史结果） |
+| `stress` | `float` / `split` | 对拍查看器指定风格 |
+
+`close` 参数：`test` / `edit` / `stress`（无参 = 全部关闭）。
+
+**双风格共存：** 在任意 UI 窗口中按 `f` 即可在 float 与 split 间切换。不同查看器（test、edit、stress）只要使用不同风格即可同时存在 —— 例如 TestUI 以 float 显示 + EditUI 以 split 显示。切换某查看器的风格时，引擎会自动关闭占用目标风格的其他查看器，保证全局最多一个 float 和一个 split 窗口。
 
 ### 提交
 
@@ -174,6 +193,7 @@ map("n", "<leader>cdP", ":FOJ stress correct=find: test=find:<CR>",
 | `mem` | 整数 (MB) | 内存限制（默认: `default_memory_limit`） |
 
 参数值支持三种引用风格，用于包含空格或特殊字符的路径：
+
 - 双引号 `"..."` — 单引号 `'...'` — C++ 原始字符串 `R"(...)"` / `R"delim(...)delim"`
 
 **示例：**
@@ -267,11 +287,40 @@ run_command = {
 
 ### UI 布局
 
-- **`tc_ui`** — 判题结果（用例列表、输入、输出、信息、预期输出）
-- **`tc_edit_ui`** — 测试用例编辑器（用例列表、输入、输出）
-- **`stress_ui`** — 对拍结果查看器
+每个 UI（`tc_ui`、`tc_edit_ui`、`stress_ui`）支持两种风格：**float**（浮动窗口）和 **split**（原生 Neovim 分屏）。在任何 UI 窗口中按 `f` 即可切换。
 
-每项含 `width`、`height`、`layout`（递归树结构）和 `mappings`。
+```lua
+tc_ui = {
+  default_style = "float",            -- "float" | "split"
+  mappings = {                        -- 两种风格共用
+    close = { "<esc>", "<C-c>", "q", "Q" },
+    toggle_style = { "f" },           -- 新增：切换 float/split
+    -- ... view, focus_next 等
+  },
+  float = {
+    width = 0.9, height = 0.9,
+    layout = {                        -- 递归 {weight, content} 树
+      { 4, "tc" },                    -- 用例列表，权重 4
+      { 5, { { 1, "si" }, { 1, "so" } } },  -- 输入/输出，垂直分屏
+      { 5, { { 1, "info" }, { 1, "eo" } } }, -- 信息/预期，垂直分屏
+    },
+  },
+  split = {
+    width = 0.3,                      -- 占编辑器宽度比例
+    direction = "right",              -- "right"|"left"|"above"|"below"
+    layout = { ... },                 -- 相同的递归语法
+  },
+}
+```
+
+| 风格 | 参数 |
+| --- | --- |
+| `float` | `width`（比例）、`height`（比例）、`layout` |
+| `split` | `width`（比例）、`direction`（默认 `"right"`）、`layout` |
+
+- **`tc_ui`** — 判题结果（面板：`tc`、`si`、`so`、`info`、`eo`）
+- **`tc_edit_ui`** — 测试用例编辑器（面板：`tc`、`si`、`so`）
+- **`stress_ui`** — 对拍结果查看器（面板：`tc`、`si`、`so`、`info`、`eo`）
 
 ### 高亮
 

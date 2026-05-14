@@ -40,6 +40,7 @@ end
 
 function M.setup(cfg)
 	M.config = cfg
+	M.current_style = cfg.stress_ui and cfg.stress_ui.default_style or "float"
 	local hls = cfg.highlights or {}
 
 	local function init_hl_group(prefix, colors)
@@ -54,8 +55,20 @@ function M.setup(cfg)
 	init_hl_group("StressUIStd", hls.stdio)
 end
 
+---Get current effective style
+local function get_style()
+	return M.current_style or (M.config.stress_ui and M.config.stress_ui.default_style) or "float"
+end
+
+---Get style-specific config table
+local function get_style_config()
+	local ui_cfg = M.config.stress_ui
+	local s = get_style()
+	return ui_cfg[s] or ui_cfg.float
+end
+
 local function set_buf_content(key, lines, highlights)
-	local inst = ui.instances[GROUP]
+	local inst = ui.get_instance(GROUP, get_style())
 	if not inst or not inst.bufs[key] then
 		return
 	end
@@ -74,7 +87,7 @@ local function set_buf_content(key, lines, highlights)
 	end
 end
 
----刷新详情
+---Refresh detail panels
 local function update_details(index)
 	local r = M.state.results[index]
 	if not r then
@@ -85,17 +98,16 @@ local function update_details(index)
 	set_buf_content("eo", vim.split(r.correct and r.correct.output or "", "\n"))
 	set_buf_content("so", vim.split(r.test and r.test.output or "", "\n"))
 
-	-- info: 合并两份代码的错误信息
 	local info_lines = {}
-	if r.correct and r.correct.state.type ~= "OK" then
+	if r.correct and r.correct.state and r.correct.state.type ~= "OK" then
 		table.insert(info_lines, "[Correct] " .. r.correct.state.type .. ": " .. (r.correct.state.msg or ""))
 		table.insert(info_lines, "  time=" .. (r.correct.used_time or 0) .. "ms mem=" .. (r.correct.used_memory or 0) .. "KB")
 	end
-	if r.test and r.test.state.type ~= "OK" then
+	if r.test and r.test.state and r.test.state.type ~= "OK" then
 		table.insert(info_lines, "[Test] " .. r.test.state.type .. ": " .. (r.test.state.msg or ""))
 		table.insert(info_lines, "  time=" .. (r.test.used_time or 0) .. "ms mem=" .. (r.test.used_memory or 0) .. "KB")
 	end
-	if r.test and r.test.state.type == "OK" and r.correct and r.correct.state.type == "OK" then
+	if r.test and r.test.state and r.test.state.type == "OK" and r.correct and r.correct.state and r.correct.state.type == "OK" then
 		if r.match then
 			table.insert(info_lines, "Outputs match")
 		else
@@ -104,7 +116,6 @@ local function update_details(index)
 	end
 	set_buf_content("info", info_lines)
 
-	-- so 的高亮 (差异着色)
 	local out_hls = {}
 	if r.diff then
 		for _, d in ipairs(r.diff) do
@@ -119,7 +130,7 @@ local function update_details(index)
 	set_buf_content("so", vim.split(r.test and r.test.output or "", "\n"), out_hls)
 end
 
----更新 TC 列表和详情
+---Update TC list and details
 function M.update(size, results)
 	vim.schedule(function()
 		M.state.size, M.state.results = size, results or {}
@@ -168,12 +179,82 @@ function M.update(size, results)
 	end)
 end
 
+---Toggle between float and split styles
+function M.toggle_style()
+	local old_style = get_style()
+	local new_style = (old_style == "float") and "split" or "float"
+
+	-- Save state
+	local saved_size = M.state.size
+	local saved_results = {}
+	for i, r in ipairs(M.state.results) do
+		saved_results[i] = r
+	end
+
+	-- Close old style
+	ui.close_style(GROUP, old_style)
+
+	-- Open new style
+	M.current_style = new_style
+	local cfg = get_style_config()
+	ui.open(GROUP, new_style, cfg, TITLES, WIN_OPTS, function()
+		local inst = ui.get_instance(GROUP, new_style)
+		local tc_buf = inst.bufs.tc
+
+		for _, buf in pairs(inst.bufs) do
+			vim.api.nvim_create_autocmd("BufWinLeave", {
+				buffer = buf,
+				once = true,
+				callback = function()
+					vim.schedule(function()
+						if M.is_open() then
+							M.close()
+						end
+					end)
+				end,
+			})
+		end
+
+		M.bind_keys()
+
+		vim.api.nvim_clear_autocmds({ buffer = tc_buf, event = "CursorMoved" })
+		vim.api.nvim_create_autocmd("CursorMoved", {
+			buffer = tc_buf,
+			callback = function()
+				local cursor = vim.api.nvim_win_get_cursor(0)
+				local r = math.max(2, cursor[1])
+				if r ~= cursor[1] or cursor[2] ~= 5 then
+					vim.api.nvim_win_set_cursor(0, { r, 5 })
+				end
+				M.state.current_idx = r - 1
+				update_details(M.state.current_idx)
+			end,
+		})
+
+		-- Restore state
+		M.state.size = saved_size
+		M.state.results = saved_results
+		M.state.current_idx = 1
+		M.update(saved_size, saved_results)
+	end)
+end
+
 function M.bind_keys()
-	local inst = ui.instances[GROUP]
+	local inst = ui.get_instance(GROUP, get_style())
+	if not inst then
+		return
+	end
 	local maps = M.config.stress_ui.mappings
 
 	for key, buf in pairs(inst.bufs) do
 		local opts = { buffer = buf, nowait = true, silent = true }
+
+		-- Toggle style key on all buffers
+		if maps.toggle_style then
+			for _, k in ipairs(maps.toggle_style) do
+				vim.keymap.set("n", k, M.toggle_style, opts)
+			end
+		end
 
 		if key == "tc" then
 			for _, k in ipairs(maps.close) do
@@ -181,7 +262,7 @@ function M.bind_keys()
 			end
 			for _, k in ipairs(maps.view) do
 				vim.keymap.set("n", k, function()
-					local win = ui.get_win_by_key(GROUP, "si")
+					local win = ui.get_win_by_key(GROUP, "si", get_style())
 					if win then
 						vim.api.nvim_set_current_win(win)
 					end
@@ -206,7 +287,7 @@ function M.bind_keys()
 		else
 			for _, k in ipairs(maps.close) do
 				vim.keymap.set("n", k, function()
-					local win = ui.get_win_by_key(GROUP, "tc")
+					local win = ui.get_win_by_key(GROUP, "tc", get_style())
 					if win then
 						vim.api.nvim_set_current_win(win)
 						vim.api.nvim_win_set_cursor(win, { M.state.current_idx + 1, 2 })
@@ -222,7 +303,7 @@ function M.bind_keys()
 					end
 				end
 				local next_key = DETAIL_CYCLE[(curr_idx + step - 1) % #DETAIL_CYCLE + 1]
-				local win = ui.get_win_by_key(GROUP, next_key)
+				local win = ui.get_win_by_key(GROUP, next_key, get_style())
 				if win then
 					vim.api.nvim_set_current_win(win)
 				end
@@ -241,13 +322,27 @@ function M.bind_keys()
 	end
 end
 
-function M.show()
+function M.show(style)
 	vim.schedule(function()
-		if M.state.size == 0 or M.is_open() then
+		if style then
+			M.current_style = style
+		end
+		if M.state.size == 0 then
 			return
 		end
-		ui.open(GROUP, M.config.stress_ui, TITLES, WIN_OPTS, function()
-			local inst = ui.instances[GROUP]
+
+		local s = get_style()
+		if ui.is_open(GROUP, s) then
+			return
+		end
+
+		-- Close other style of same viewer, engine handles cross-viewer same-style interlock
+		local other = (s == "float") and "split" or "float"
+		ui.close_style(GROUP, other)
+
+		local cfg = get_style_config()
+		ui.open(GROUP, s, cfg, TITLES, WIN_OPTS, function()
+			local inst = ui.get_instance(GROUP, s)
 			local tc_buf = inst.bufs.tc
 
 			for _, buf in pairs(inst.bufs) do
@@ -265,7 +360,8 @@ function M.show()
 
 			M.bind_keys()
 
-			vim.api.nvim_create_autocmd("CursorMoved", {
+			vim.api.nvim_clear_autocmds({ buffer = tc_buf, event = "CursorMoved" })
+		vim.api.nvim_create_autocmd("CursorMoved", {
 				buffer = tc_buf,
 				callback = function()
 					local cursor = vim.api.nvim_win_get_cursor(0)
@@ -284,7 +380,7 @@ end
 
 function M.close(cb)
 	vim.schedule(function()
-		ui.close(GROUP)
+		ui.close_style(GROUP, get_style())
 		if cb then
 			cb()
 		end
@@ -292,7 +388,7 @@ function M.close(cb)
 end
 
 function M.is_open()
-	return ui.is_open(GROUP)
+	return ui.is_open(GROUP, get_style())
 end
 
 function M.clear()

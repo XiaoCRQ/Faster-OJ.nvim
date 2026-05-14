@@ -1,11 +1,13 @@
 ---@module "faster-oj.module.init"
 
 local ui = require("faster-oj.module.ui.tests")
+local edit = require("faster-oj.module.ui.tests_edit")
+local ui_engine = require("faster-oj.module.ui")
 local utils = require("faster-oj.module.utils")
 local runner = require("faster-oj.module.run")
 local submit = require("faster-oj.module.submit")
-local edit = require("faster-oj.module.ui.tests_edit")
 local stress_mod = require("faster-oj.module.stress")
+local stress_ui = require("faster-oj.module.ui.stress")
 local notify = require("faster-oj.module.notify")
 
 ---@class FOJ.moduleModule
@@ -13,8 +15,9 @@ local notify = require("faster-oj.module.notify")
 ---@field setup fun(cfg:FOJ.Config)
 ---@field submit fun(send:any)
 ---@field run fun(need_compile:boolean)
----@field show fun()
----@field close fun()
+---@field show fun(ctrl:string?)
+---@field close fun(ctrl:string?)
+---@field last_session string|nil
 local M = {}
 
 ---@param level string
@@ -41,114 +44,241 @@ function M.submit(send)
 end
 
 function M.run(need_compile)
-	edit.close(function()
-		local file_path = utils.get_file_path()
-		local json = utils.get_json_file()
-		local tests = {}
+	-- Close all edit styles
+	ui_engine.close("EditUI")
 
-		vim.cmd("write")
+	local file_path = utils.get_file_path()
+	local json = utils.get_json_file()
+	local tests = {}
 
-		if json == nil then
-			log("WARN", "run", "No problem data found")
-			notify.show("No problem data found", "WARN")
+	vim.cmd("write")
+
+	if json == nil then
+		log("WARN", "run", "No problem data found")
+		notify.show("No problem data found", "WARN")
+		return
+	end
+
+	local test_count = json.testCount or 0
+	local problem_dir = utils.get_problem_dir_from(file_path)
+	for i = 0, test_count - 1 do
+		local tc = utils.read_test_case(problem_dir, i)
+		tests[i + 1] = { input = tc.input, expected = tc.output }
+	end
+
+	ui.update(test_count, tests)
+
+	local ext = vim.fn.fnamemodify(file_path, ":e")
+	local has_compile = M.config.compile_command[ext]
+		and M.config.compile_command[ext].exec
+		and M.config.compile_command[ext].exec ~= ""
+
+	local compile_spin = nil
+	if has_compile and need_compile ~= false then
+		compile_spin = notify.spinner_start("Compiling " .. vim.fn.fnamemodify(file_path, ":t"))
+	end
+
+	log("INFO", "run", "Starting test execution")
+
+	runner.compile(file_path, need_compile, function(success, msg, did_compile)
+		if not success then
+			if compile_spin then
+				notify.spinner_fail(compile_spin, "Compilation FAILED")
+			end
+			notify.show("Compilation FAILED", "ERROR")
+			vim.notify(msg or "", vim.log.levels.ERROR, { title = "Compilation Error" })
 			return
 		end
 
-		local test_count = json.testCount or 0
-		local problem_dir = utils.get_problem_dir_from(file_path)
-		for i = 0, test_count - 1 do
-			local tc = utils.read_test_case(problem_dir, i)
-			tests[i + 1] = { input = tc.input, expected = tc.output }
+		if did_compile then
+			notify.spinner_done(compile_spin, "Compilation OK")
 		end
 
-		ui.update(test_count, tests)
-
-		local ext = vim.fn.fnamemodify(file_path, ":e")
-		local has_compile = M.config.compile_command[ext]
-			and M.config.compile_command[ext].exec
-			and M.config.compile_command[ext].exec ~= ""
-
-		local compile_spin = nil
-		if has_compile and need_compile ~= false then
-			compile_spin = notify.spinner_start("Compiling " .. vim.fn.fnamemodify(file_path, ":t"))
+		if not ui.is_open() then
+			ui.show()
 		end
 
-		log("INFO", "run", "Starting test execution")
+		log("INFO", "run", "Running " .. test_count .. " test(s)")
+		notify.show("Running " .. test_count .. " test(s) ...", "INFO", 2000)
 
-		runner.compile(file_path, need_compile, function(success, msg, did_compile)
-			if not success then
-				if compile_spin then
-					notify.spinner_fail(compile_spin, "Compilation FAILED")
+		runner.run(file_path, json, function(res)
+			log("INFO", "run", "Test " .. res.test_index .. " completed")
+			tests[res.test_index] = res
+			ui.update(test_count, tests)
+
+			local finished = 0
+			local ac_count = 0
+			for _, t in pairs(tests) do
+				finished = finished + 1
+				if t.state and t.state.type == "AC" then
+					ac_count = ac_count + 1
 				end
-				notify.show("Compilation FAILED", "ERROR")
-				vim.notify(msg or "", vim.log.levels.ERROR, { title = "Compilation Error" })
-				return
 			end
-
-			if did_compile then
-				notify.spinner_done(compile_spin, "Compilation OK")
-			end
-
-			if not ui.is_open() then
-				ui.show()
-			end
-
-			log("INFO", "run", "Running " .. test_count .. " test(s)")
-			notify.show("Running " .. test_count .. " test(s) ...", "INFO", 2000)
-
-			runner.run(file_path, json, function(res)
-				log("INFO", "run", "Test " .. res.test_index .. " completed")
-				tests[res.test_index] = res
-				ui.update(test_count, tests)
-
-				local finished = 0
-				local ac_count = 0
-				for _, t in pairs(tests) do
-					finished = finished + 1
-					if t.state and t.state.type == "AC" then
-						ac_count = ac_count + 1
-					end
+			if finished == test_count then
+				M.last_session = "tests"
+				log("INFO", "run", string.format("All done: %d/%d AC", ac_count, finished))
+				local total = test_count
+				if ac_count == total then
+					notify.show(string.format("Done: %d/%d AC", ac_count, total), "DONE")
+				else
+					notify.show(string.format("Done: %d/%d AC", ac_count, total), "WARN")
 				end
-				if finished == test_count then
-					log("INFO", "run", string.format("All done: %d/%d AC", ac_count, finished))
-					local total = test_count
-					if ac_count == total then
-						notify.show(string.format("Done: %d/%d AC", ac_count, total), "DONE")
-					else
-						notify.show(string.format("Done: %d/%d AC", ac_count, total), "WARN")
-					end
-				end
-			end)
+			end
 		end)
 	end)
 end
 
-function M.show()
-	edit.close()
-	if ui.is_open() then
-		ui.close()
-		return
+-- ── Unified show ─────────────────────────────────────────
+
+--- Show/toggle/switch windows.
+--- ctrl: "test"|"edit"|"stress" [float|split]
+---   nil / ""         -> open last session; no history -> no-op
+---   "test"           -> toggle test viewer (default_style)
+---   "test float"     -> show test viewer in float style
+---   "test split"     -> show test viewer in split style
+---   "edit"           -> toggle edit viewer
+---   "edit float" / "edit split"
+---   "stress"         -> show last stress results (if any)
+---   "stress float" / "stress split"
+---@param ctrl string|nil
+function M.show(ctrl)
+	-- Parse "sub1 [sub2]" -> viewer + optional style
+	local viewer, style
+	if ctrl and ctrl ~= "" then
+		local parts = vim.split(ctrl, "%s+", { trimempty = true })
+		local sub1 = parts[1]:lower()
+
+		-- Map user-facing names to internal viewer keys
+		if sub1 == "test" then
+			viewer = "tests"
+		elseif sub1 == "edit" then
+			viewer = "edit"
+		elseif sub1 == "stress" then
+			viewer = "stress"
+		else
+			return -- invalid, no-op
+		end
+
+		style = (parts[2] or ""):lower()
+		if style ~= "float" and style ~= "split" then
+			style = nil
+		end
 	end
-	ui.show()
+
+	if viewer == "edit" then
+		if style then
+			edit.current_style = style
+		end
+		if edit.is_open() then
+			edit.close()
+			M.last_session = nil
+		else
+			edit.edit()
+			M.last_session = "edit"
+		end
+	elseif viewer == "stress" then
+		if style then
+			stress_ui.current_style = style
+		end
+		if stress_ui.is_open() then
+			stress_ui.close()
+			M.last_session = nil
+		else
+			if stress_ui.state and stress_ui.state.size and stress_ui.state.size > 0 then
+				stress_ui.show()
+				M.last_session = "stress"
+			end
+		end
+	else
+		-- tests or nil/"" (last session)
+		if not viewer and not M.last_session then
+			return
+		end
+
+		local target_viewer = viewer or M.last_session
+
+		if target_viewer == "tests" then
+			if style then
+				ui.current_style = style
+			end
+			if ui.is_open() then
+				ui.close()
+				M.last_session = nil
+			else
+				ui.show()
+				if ui.is_open() then
+					M.last_session = "tests"
+				end
+			end
+		elseif target_viewer == "edit" then
+			if style then
+				edit.current_style = style
+			end
+			if edit.is_open() then
+				edit.close()
+				M.last_session = nil
+			else
+				edit.edit()
+				M.last_session = "edit"
+			end
+		elseif target_viewer == "stress" then
+			if style then
+				stress_ui.current_style = style
+			end
+			if stress_ui.is_open() then
+				stress_ui.close()
+				M.last_session = nil
+			else
+				if stress_ui.state and stress_ui.state.size and stress_ui.state.size > 0 then
+					stress_ui.show()
+					M.last_session = "stress"
+				end
+			end
+		end
+	end
 end
 
-function M.close()
-	ui.close()
+-- ── Unified close ────────────────────────────────────────
+
+--- Close windows.
+--- ctrl:
+---   nil / ""      -> close all UI windows (all groups, both styles)
+---   "test"        -> close test viewer (both styles)
+---   "edit"        -> close edit viewer (both styles)
+---   "stress"      -> close stress viewer (both styles)
+---   invalid       -> no-op
+---@param ctrl string|nil
+function M.close(ctrl)
+	if not ctrl or ctrl == "" then
+		ui_engine.close("TestUI")
+		ui_engine.close("EditUI")
+		ui_engine.close("StressUI")
+		M.last_session = nil
+	else
+		local sub = ctrl:lower()
+		if sub == "test" then
+			ui_engine.close("TestUI")
+			if M.last_session == "tests" then
+				M.last_session = nil
+			end
+		elseif sub == "edit" then
+			ui_engine.close("EditUI")
+			if M.last_session == "edit" then
+				M.last_session = nil
+			end
+		elseif sub == "stress" then
+			ui_engine.close("StressUI")
+			if M.last_session == "stress" then
+				M.last_session = nil
+			end
+		end
+	end
 end
 
----启动对拍测试
 ---@param opts? table
 function M.stress(opts)
 	stress_mod.stress(opts)
-end
-
-function M.edit()
-	ui.close()
-	if edit.is_open() then
-		edit.close()
-		return
-	end
-	edit.edit()
+	M.last_session = "stress"
 end
 
 function M.erase()

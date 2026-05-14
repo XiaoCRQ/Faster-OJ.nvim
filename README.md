@@ -20,7 +20,7 @@
 - **Fully Automated Workflow**: Fetch problems via [Competitive Companion](https://github.com/jmerle/competitive-companion) and submit with the [Faster-OJ browser extension](https://github.com/XiaoCRQ/Faster-OJ).
 - **Local Judge**: Concurrent test execution with time/memory measurement. Lexical fuzzy matching (`obscure`) and memory offset compensation.
 - **Stress Testing (对拍)**: Run two solutions against the same inputs — catch edge cases fast.
-- **Multi-Panel UI**: Judge results, test case editor with real-time sync, stress test viewer.
+- **Dual-Style UI**: Float (floating windows) and Split (native Neovim splits) modes. Switch on the fly with `f`.
 - **Smart Finder**: Integrates with `snacks.nvim`, `telescope.nvim`, `fzf-lua`, `mini.pick`, or `vim.ui.select`.
 - **Robust Quoting**: Stress test arguments support three quoting styles — `"..."`, `'...'`, and C++ raw strings `R"(...)"` — for paths with spaces and special characters.
 
@@ -95,8 +95,10 @@ map("n", "<leader>cdr", ":FOJ submit<CR>",       vim.tbl_extend("force", opts, {
 -- Judge & UI
 map("n", "<leader>cdt", ":FOJ run<CR>",          vim.tbl_extend("force", opts, { desc = "FOJ: Compile and judge" }))
 map("n", "<leader>cdT", ":FOJ test<CR>",         vim.tbl_extend("force", opts, { desc = "FOJ: Judge only (skip compile)" }))
-map("n", "<leader>cdu", ":FOJ show<CR>",         vim.tbl_extend("force", opts, { desc = "FOJ: Toggle judge UI" }))
-map("n", "<leader>cde", ":FOJ edit<CR>",         vim.tbl_extend("force", opts, { desc = "FOJ: Edit test cases" }))
+map("n", "<leader>cdu", ":FOJ show<CR>",         vim.tbl_extend("force", opts, { desc = "FOJ: Reopen last session" }))
+map("n", "<leader>cdU", ":FOJ show test split<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Show tests (split)" }))
+map("n", "<leader>cde", ":FOJ show edit<CR>",    vim.tbl_extend("force", opts, { desc = "FOJ: Toggle test editor" }))
+map("n", "<leader>cdC", ":FOJ close<CR>",         vim.tbl_extend("force", opts, { desc = "FOJ: Close all UI windows" }))
 
 -- Data management
 map("n", "<leader>cds", ":FOJ solve<CR>",        vim.tbl_extend("force", opts, { desc = "FOJ: Mark as solved" }))
@@ -125,14 +127,31 @@ map("n", "<leader>cdP", ":FOJ stress correct=find: test=find:<CR>",
 | `:FOJ start [mod]` | Start mode: `all` / `http` / `ws` |
 | `:FOJ stop [mod]` | Stop services |
 
-### Judge
+### Judge & UI
 
 | Command | Description |
 | --- | --- |
 | `:FOJ run` | Save, compile, and run all test cases |
 | `:FOJ test` | Run test cases without recompiling |
-| `:FOJ show` | Toggle judge result UI |
-| `:FOJ edit` | Toggle test case editor (add/delete/modify) |
+| `:FOJ show [sub1] [sub2]` | Reopen last session or toggle specified UI (see below) |
+| `:FOJ close [sub]` | Close UI windows (no arg = close all) |
+| `:FOJ edit` | Toggle test case editor (alias for `:FOJ show edit`) |
+
+`show` arguments:
+
+| `sub1` | `sub2` (optional) | Action |
+| --- | --- | --- |
+| *(none)* | — | Reopen last active session; no-op if no history |
+| `test` | — | Toggle test viewer (default style) |
+| `test` | `float` / `split` | Test viewer with specific style |
+| `edit` | — | Toggle test case editor (default style) |
+| `edit` | `float` / `split` | Editor with specific style |
+| `stress` | — | Toggle stress viewer (if prior results exist) |
+| `stress` | `float` / `split` | Stress viewer with specific style |
+
+`close` arguments: `test` / `edit` / `stress` (no arg = close all).
+
+**Dual-style behavior:** Press `f` inside any UI window to toggle between float and split. Different viewers (test, edit, stress) can coexist as long as they use different styles — e.g., TestUI in float + EditUI in split. Switching a viewer's style automatically closes any other viewer using the target style, ensuring at most one float and one split window globally.
 
 ### Submit
 
@@ -267,11 +286,40 @@ run_command = {
 
 ### UI Layouts
 
-- **`tc_ui`** — Judge results (testcases, input, output, info, expected output)
-- **`tc_edit_ui`** — Test case editor (testcase list, input, output)
-- **`stress_ui`** — Stress test viewer
+Each UI (`tc_ui`, `tc_edit_ui`, `stress_ui`) supports two styles: **float** (floating windows) and **split** (native Neovim splits). Press `f` inside any UI window to toggle between them.
 
-Each has `width`, `height`, `layout` (recursive tree), and `mappings`.
+```lua
+tc_ui = {
+  default_style = "float",            -- "float" | "split"
+  mappings = {                        -- shared across styles
+    close = { "<esc>", "<C-c>", "q", "Q" },
+    toggle_style = { "f" },           -- NEW: switch float/split
+    -- ... view, focus_next, etc.
+  },
+  float = {
+    width = 0.9, height = 0.9,
+    layout = {                        -- recursive {weight, content} tree
+      { 4, "tc" },                    -- test case list, weight 4
+      { 5, { { 1, "si" }, { 1, "so" } } },  -- input/output, vertical split
+      { 5, { { 1, "info" }, { 1, "eo" } } }, -- info/expected, vertical split
+    },
+  },
+  split = {
+    width = 0.3,                      -- ratio of editor width/height
+    direction = "right",              -- "right"|"left"|"above"|"below"
+    layout = { ... },                 -- same recursive syntax
+  },
+}
+```
+
+| Style | Parameters |
+| --- | --- |
+| `float` | `width` (ratio), `height` (ratio), `layout` |
+| `split` | `width` (ratio), `direction` (`"right"` default), `layout` |
+
+- **`tc_ui`** — Judge results (panels: `tc`, `si`, `so`, `info`, `eo`)
+- **`tc_edit_ui`** — Test case editor (panels: `tc`, `si`, `so`)
+- **`stress_ui`** — Stress test viewer (panels: `tc`, `si`, `so`, `info`, `eo`)
 
 ### Highlights
 

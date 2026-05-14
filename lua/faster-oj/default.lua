@@ -24,24 +24,24 @@
 ---@field max_solve_history integer 最大解题历史条目数
 ---@field default_time_limit integer 缺省时间限制 (ms)
 ---@field default_memory_limit integer 缺省内存限制 (MB)
----@field tc_ui FOJ.TCUIConfig UI 布局配置
----@field tc_edit_ui FOJ.TCManageUIConfig UI 布局配置
----@field stress_ui FOJ.TCUIConfig 对拍 UI 布局配置
+---@field tc_ui FOJ.UIConfig UI 布局配置
+---@field tc_edit_ui FOJ.UIConfig UI 布局配置
+---@field stress_ui FOJ.UIConfig 对拍 UI 布局配置
 ---@field highlights FOJ.HighlightConfig 高亮颜色配置
 ---@field compile_command table<string, FOJ.Command> 编译命令表
 ---@field run_command table<string, FOJ.Command> 运行命令表
 
----@class FOJ.TCUIConfig
----@field width number UI 宽度比例 (0~1)
----@field height number UI 高度比例 (0~1)
----@field layout table UI 布局结构
----@field mappings table UI 快捷键
+---@class FOJ.UIStyleConfig
+---@field width number 占屏比例 (0~1)
+---@field height? number 高度比例 (0~1)，仅 float 使用
+---@field layout table 递归布局结构 {weight, content}
+---@field direction? string 分屏方向，"right"|"left"|"above"|"below"，仅 split 使用
 
----@class FOJ.TCManageUIConfig
----@field width number UI 宽度比例 (0~1)
----@field height number UI 高度比例 (0~1)
----@field layout table UI 布局结构
----@field mappings table UI 快捷键
+---@class FOJ.UIConfig
+---@field default_style '"float"'|'"split"' 默认 UI 风格
+---@field mappings table 快捷键（两种风格共用）
+---@field float FOJ.UIStyleConfig 浮动风格配置
+---@field split FOJ.UIStyleConfig 分屏风格配置
 
 ---@class FOJ.HighlightConfig
 ---@class FOJ.HighlightConfig.windows
@@ -103,13 +103,7 @@ M.config = {
 	default_memory_limit = 256, -- Default memory limit (MB)
 
 	tc_ui = {
-		width = 0.9,
-		height = 0.9,
-		layout = {
-			{ 4, "tc" },
-			{ 5, { { 1, "si" }, { 1, "so" } } },
-			{ 5, { { 1, "info" }, { 1, "eo" } } },
-		},
+		default_style = "float",
 		mappings = {
 			close = { "<esc>", "<C-c>", "q", "Q" },
 			view = { "a", "i", "o", "O" },
@@ -117,6 +111,35 @@ M.config = {
 			view_focus_prev = { "<S-Tab>" },
 			focus_next = { "j", "<down>", "<Tab>" },
 			focus_prev = { "k", "<up>", "<S-Tab>" },
+			toggle_style = { "f" },
+		},
+		float = {
+			width = 0.9,
+			height = 0.9,
+			layout = {
+				{ 4, "tc" },
+				{ 5, { { 1, "si" }, { 1, "so" } } },
+				{ 5, { { 1, "info" }, { 1, "eo" } } },
+			},
+		},
+		split = {
+			width = 0.3,
+			direction = "right",
+			layout = {
+				{
+					1,
+					{
+						{ 1, "tc" },
+						{
+							1,
+							{
+								{ 5, { { 1, "si" }, { 1, "so" } } },
+								{ 5, { { 1, "info" }, { 1, "eo" } } },
+							},
+						},
+					},
+				},
+			},
 		},
 		-- tc   = Testcases
 		-- si   = Standard Input
@@ -126,13 +149,7 @@ M.config = {
 	},
 
 	tc_edit_ui = {
-		width = 0.9,
-		height = 0.9,
-		layout = {
-			{ 3, "tc" },
-			{ 5, "si" },
-			{ 5, "so" },
-		},
+		default_style = "float",
 		mappings = {
 			close = { "<esc>", "<C-c>", "q", "Q" },
 			erase = { "d" },
@@ -143,17 +160,34 @@ M.config = {
 			edit_focus_prev = { "<S-Tab>" },
 			focus_next = { "j", "<down>", "<Tab>" },
 			focus_prev = { "k", "<up>", "<S-Tab>" },
+			toggle_style = { "f" },
+		},
+		float = {
+			width = 0.9,
+			height = 0.9,
+			layout = {
+				{ 3, "tc" },
+				{ 5, "si" },
+				{ 5, "so" },
+			},
+		},
+		split = {
+			width = 0.3,
+			direction = "right",
+			layout = {
+				{
+					1,
+					{
+						{ 1, "tc" },
+						{ 1, { 1, "si" }, { 1, "so" } },
+					},
+				},
+			},
 		},
 	},
 
 	stress_ui = {
-		width = 0.9,
-		height = 0.9,
-		layout = {
-			{ 4, "tc" },
-			{ 5, { { 1, "si" }, { 1, "so" } } },
-			{ 5, { { 1, "info" }, { 1, "eo" } } },
-		},
+		default_style = "float",
 		mappings = {
 			close = { "<esc>", "<C-c>", "q", "Q" },
 			view = { "a", "i", "o", "O" },
@@ -161,6 +195,35 @@ M.config = {
 			view_focus_prev = { "<S-Tab>" },
 			focus_next = { "j", "<down>", "<Tab>" },
 			focus_prev = { "k", "<up>", "<S-Tab>" },
+			toggle_style = { "f" },
+		},
+		float = {
+			width = 0.9,
+			height = 0.9,
+			layout = {
+				{ 4, "tc" },
+				{ 5, { { 1, "si" }, { 1, "so" } } },
+				{ 5, { { 1, "info" }, { 1, "eo" } } },
+			},
+		},
+		split = {
+			width = 0.3,
+			direction = "right",
+			layout = {
+				{
+					1,
+					{
+						{ 1, "tc" },
+						{
+							1,
+							{
+								{ 5, { { 1, "si" }, { 1, "so" } } },
+								{ 5, { { 1, "info" }, { 1, "eo" } } },
+							},
+						},
+					},
+				},
+			},
 		},
 	},
 

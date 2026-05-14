@@ -3,6 +3,7 @@
 local utils = require("faster-oj.module.utils")
 local runner = require("faster-oj.module.run")
 local stress_ui = require("faster-oj.module.ui.stress")
+local ui_engine = require("faster-oj.module.ui")
 local notify = require("faster-oj.module.notify")
 
 ---@class FOJ.StressModule
@@ -254,7 +255,7 @@ function M.stress(opts)
 		return
 	end
 
-	stress_ui.close()
+	ui_engine.close("StressUI")
 	local spin = notify.spinner_start("Setting up stress test ...")
 
 	resolve_code(opts.correct, "Select correct code", function(correct_path)

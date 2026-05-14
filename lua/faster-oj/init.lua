@@ -120,14 +120,14 @@ function M.setup(opts)
 		test = function()
 			module.run(false)
 		end,
-		show = function()
-			module.show()
+		show = function(sub)
+			module.show(sub)
 		end,
-		close = function()
-			module.close()
+		close = function(sub)
+			module.close(sub)
 		end,
 		edit = function()
-			module.edit()
+			module.show("edit")
 		end,
 		submit = function()
 			module.submit({

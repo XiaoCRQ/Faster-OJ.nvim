@@ -34,11 +34,24 @@ end
 
 function M.setup(cfg)
 	M.config = cfg or {}
+	M.current_style = cfg.tc_edit_ui and cfg.tc_edit_ui.default_style or "float"
 end
 
----设置 Buffer 内容
+---Get current effective style
+local function get_style()
+	return M.current_style or (M.config.tc_edit_ui and M.config.tc_edit_ui.default_style) or "float"
+end
+
+---Get style-specific config table
+local function get_style_config()
+	local ui_cfg = M.config.tc_edit_ui
+	local s = get_style()
+	return ui_cfg[s] or ui_cfg.float
+end
+
+---Set buffer content
 local function set_buf_content(key, lines)
-	local inst = ui.instances[GROUP]
+	local inst = ui.get_instance(GROUP, get_style())
 	if not inst or not inst.bufs[key] then
 		return
 	end
@@ -52,7 +65,7 @@ local function set_buf_content(key, lines)
 	M.state.is_updating = false
 end
 
----刷新 TC 列表
+---Refresh TC list
 local function update_tc_list()
 	local lines = {}
 	for i = 1, M.state.test_count do
@@ -61,12 +74,12 @@ local function update_tc_list()
 	set_buf_content("tc", lines)
 end
 
----保存当前编辑缓冲区到文件
+---Save current edit buffers to file
 local function flush_current_to_file()
 	if M.state.current_index < 1 or M.state.current_index > M.state.test_count then
 		return
 	end
-	local inst = ui.instances[GROUP]
+	local inst = ui.get_instance(GROUP, get_style())
 	local file_idx = M.state.current_index - 1
 
 	if inst and inst.bufs["si"] and vim.api.nvim_buf_is_valid(inst.bufs["si"]) then
@@ -81,13 +94,12 @@ local function flush_current_to_file()
 	end
 end
 
----加载测试用例到缓冲区
+---Load test case into buffers
 local function update_details(index)
 	if index < 1 or index > M.state.test_count then
 		return
 	end
 
-	-- 保存当前缓冲区
 	if index ~= M.state.current_index then
 		flush_current_to_file()
 	end
@@ -102,9 +114,9 @@ local function update_details(index)
 	set_buf_content("so", vim.split(out_content:gsub("\n$", ""), "\n"))
 end
 
----实时同步 Buffer 到文件 (TextChanged)
+---Real-time buffer-to-file sync (TextChanged)
 local function setup_sync_logic()
-	local inst = ui.instances[GROUP]
+	local inst = ui.get_instance(GROUP, get_style())
 	local sync_map = { si = "in", so = "out" }
 
 	for buf_key, ext in pairs(sync_map) do
@@ -126,12 +138,12 @@ local function setup_sync_logic()
 	end
 end
 
----保存并更新 testCount
+---Save and update testCount
 function M.save()
 	flush_current_to_file()
 	utils.update_test_count(M.state.problem_dir, M.state.test_count)
 
-	local inst = ui.instances[GROUP]
+	local inst = ui.get_instance(GROUP, get_style())
 	if inst then
 		for _, buf in pairs(inst.bufs) do
 			vim.bo[buf].modified = false
@@ -141,13 +153,89 @@ function M.save()
 	log("INFO", "save", "Saved to " .. M.state.problem_dir)
 end
 
----绑定按键映射
-local function bind_keys()
-	local inst = ui.instances[GROUP]
+---Toggle between float and split styles
+function M.toggle_style()
+	local old_style = get_style()
+	local new_style = (old_style == "float") and "split" or "float"
+
+	-- Flush current edits to file before switching
+	flush_current_to_file()
+	utils.update_test_count(M.state.problem_dir, M.state.test_count)
+
+	-- Save state
+	local saved_problem_dir = M.state.problem_dir
+	local saved_test_count = M.state.test_count
+	local saved_index = M.state.current_index
+
+	-- Close old style
+	ui.close_style(GROUP, old_style)
+
+	-- Open new style
+	M.current_style = new_style
+	local cfg = get_style_config()
+	ui.open(GROUP, new_style, cfg, TITLES, WIN_OPTS, function()
+		M.state.problem_dir = saved_problem_dir
+		M.state.test_count = saved_test_count
+		M.state.current_index = saved_index
+
+		local inst = ui.get_instance(GROUP, new_style)
+		local tc_buf = inst.bufs.tc
+
+		for _, buf in pairs(inst.bufs) do
+			vim.api.nvim_create_autocmd("BufWinLeave", {
+				buffer = buf,
+				once = true,
+				callback = function()
+					vim.schedule(function()
+						if M.is_open() then
+							flush_current_to_file()
+							utils.update_test_count(M.state.problem_dir, M.state.test_count)
+							M.close()
+						end
+					end)
+				end,
+			})
+		end
+
+		update_tc_list()
+		update_details(saved_index)
+		M.bind_keys()
+		setup_sync_logic()
+
+		vim.api.nvim_clear_autocmds({ buffer = tc_buf, event = "CursorMoved" })
+		vim.api.nvim_create_autocmd("CursorMoved", {
+			buffer = tc_buf,
+			callback = function()
+				local cursor = vim.api.nvim_win_get_cursor(0)
+				local r = cursor[1]
+				if cursor[2] ~= 5 then
+					vim.api.nvim_win_set_cursor(0, { r, 5 })
+				end
+				if r ~= M.state.current_index then
+					update_details(r)
+				end
+			end,
+		})
+	end)
+end
+
+---Bind keymaps
+function M.bind_keys()
+	local inst = ui.get_instance(GROUP, get_style())
+	if not inst then
+		return
+	end
 	local maps = M.config.tc_edit_ui.mappings
 
 	for key, buf in pairs(inst.bufs) do
 		local opts = { buffer = buf, nowait = true, silent = true }
+
+		-- Toggle style key on all buffers
+		if maps.toggle_style then
+			for _, k in ipairs(maps.toggle_style) do
+				vim.keymap.set("n", k, M.toggle_style, opts)
+			end
+		end
 
 		for _, k in ipairs(maps.write) do
 			vim.keymap.set("n", k, M.save, opts)
@@ -159,7 +247,7 @@ local function bind_keys()
 			end
 			for _, k in ipairs(maps.edit) do
 				vim.keymap.set("n", k, function()
-					local win = ui.get_win_by_key(GROUP, "si")
+					local win = ui.get_win_by_key(GROUP, "si", get_style())
 					if win then
 						vim.api.nvim_set_current_win(win)
 					end
@@ -181,7 +269,6 @@ local function bind_keys()
 					end
 				end, opts)
 			end
-			-- 新增测试用例
 			for _, k in ipairs(maps.add) do
 				vim.keymap.set("n", k, function()
 					local new_idx = M.state.test_count
@@ -192,12 +279,11 @@ local function bind_keys()
 					vim.api.nvim_win_set_cursor(0, { M.state.test_count, 2 })
 				end, opts)
 			end
-			-- 删除测试用例
 			for _, k in ipairs(maps.erase) do
 				vim.keymap.set("n", k, function()
 					local idx = vim.api.nvim_win_get_cursor(0)[1]
 					if M.state.test_count <= 1 then
-						return -- 至少保留一个
+						return
 					end
 					if vim.fn.confirm("Delete TC " .. idx - 1 .. "?", "&Yes\n&No", 2) == 1 then
 						flush_current_to_file()
@@ -213,7 +299,7 @@ local function bind_keys()
 		else
 			for _, k in ipairs(maps.close) do
 				vim.keymap.set("n", k, function()
-					local win = ui.get_win_by_key(GROUP, "tc")
+					local win = ui.get_win_by_key(GROUP, "tc", get_style())
 					if win then
 						vim.api.nvim_set_current_win(win)
 						vim.api.nvim_win_set_cursor(win, { M.state.current_index, 2 })
@@ -229,7 +315,7 @@ local function bind_keys()
 					end
 				end
 				local target = EDIT_CYCLE[(curr_idx + step - 1) % #EDIT_CYCLE + 1]
-				local win = ui.get_win_by_key(GROUP, target)
+				local win = ui.get_win_by_key(GROUP, target, get_style())
 				if win then
 					vim.api.nvim_set_current_win(win)
 				end
@@ -248,17 +334,24 @@ local function bind_keys()
 	end
 end
 
-function M.edit()
+function M.edit(style)
 	vim.schedule(function()
-		if ui.is_open(GROUP) then
+		if style then
+			M.current_style = style
+		end
+		local s = get_style()
+		if ui.is_open(GROUP, s) then
 			return
 		end
+
+		-- Close other style of same viewer, engine handles cross-viewer same-style interlock
+		local other = (s == "float") and "split" or "float"
+		ui.close_style(GROUP, other)
 
 		local problem_dir = utils.get_problem_dir()
 		if problem_dir == "" or not utils.dir_exists(problem_dir) then
 			if vim.fn.confirm("Problem data not found. Create new?", "&Yes\n&No", 2) == 1 then
 				utils.ensure_dir(problem_dir)
-				-- 创建最小 problem.json
 				utils.write_json(problem_dir .. "problem.json", {
 					url = "",
 					name = vim.fn.fnamemodify(utils.get_file_path(), ":t:r"),
@@ -279,18 +372,17 @@ function M.edit()
 		M.state.test_count = math.max(test_count, 1)
 		M.state.current_index = 1
 
-		ui.open(GROUP, M.config.tc_edit_ui, TITLES, WIN_OPTS, function()
-			local inst = ui.instances[GROUP]
+		local cfg = get_style_config()
+		ui.open(GROUP, s, cfg, TITLES, WIN_OPTS, function()
+			local inst = ui.get_instance(GROUP, s)
 			local tc_buf = inst.bufs.tc
 
-			-- :q 关闭处理
 			for _, buf in pairs(inst.bufs) do
 				vim.api.nvim_create_autocmd("BufWinLeave", {
 					buffer = buf,
 					callback = function()
 						vim.schedule(function()
 							if M.is_open() then
-								-- 关闭前保存
 								flush_current_to_file()
 								utils.update_test_count(M.state.problem_dir, M.state.test_count)
 								M.close()
@@ -302,10 +394,11 @@ function M.edit()
 
 			update_tc_list()
 			update_details(1)
-			bind_keys()
+			M.bind_keys()
 			setup_sync_logic()
 
-			vim.api.nvim_create_autocmd("CursorMoved", {
+			vim.api.nvim_clear_autocmds({ buffer = tc_buf, event = "CursorMoved" })
+		vim.api.nvim_create_autocmd("CursorMoved", {
 				buffer = tc_buf,
 				callback = function()
 					local cursor = vim.api.nvim_win_get_cursor(0)
@@ -324,7 +417,7 @@ end
 
 function M.close(cb)
 	vim.schedule(function()
-		ui.close(GROUP)
+		ui.close_style(GROUP, get_style())
 		if cb then
 			cb()
 		end
@@ -332,7 +425,7 @@ function M.close(cb)
 end
 
 function M.is_open()
-	return ui.is_open(GROUP)
+	return ui.is_open(GROUP, get_style())
 end
 
 return M
