@@ -22,6 +22,7 @@
 ---@field clipboard_submit boolean 提交时是否将代码复制到系统剪切板
 ---@field max_workers integer 最大并发测题数量
 ---@field max_solve_history integer 最大解题历史条目数
+---@field confirm_on_duplicate boolean 重复归档时是否弹出确认对话框
 ---@field default_time_limit integer 缺省时间限制 (ms)
 ---@field default_memory_limit integer 缺省内存限制 (MB)
 ---@field tc_ui FOJ.UIConfig UI 布局配置
@@ -98,6 +99,7 @@ M.config = {
 	clipboard_submit = false, -- Copy code to clipboard on submit
 	max_workers = 5, -- Max parallel judging workers
 	max_solve_history = 100, -- Max solve history entries
+	confirm_on_duplicate = false, -- Confirm before overwriting duplicate problem in solve_dir
 
 	default_time_limit = 2000, -- Default time limit (ms)
 	default_memory_limit = 256, -- Default memory limit (MB)

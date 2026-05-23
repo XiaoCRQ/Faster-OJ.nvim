@@ -163,8 +163,8 @@ map("n", "<leader>cdP", ":FOJ stress correct=find: test=find:<CR>",
 
 | Command | Description |
 | --- | --- |
-| `:FOJ solve` | Move problem to `solve_dir`, record history |
-| `:FOJ solve back` | Undo last solve, restore files |
+| `:FOJ solve` | Move problem to `solve_dir`, record history. Detects duplicates and handles via `confirm_on_duplicate` |
+| `:FOJ solve back` | Undo last solve (one entry at a time, LIFO stack order) |
 | `:FOJ erase` | Delete problem source + data directory |
 
 ### Finder
@@ -255,6 +255,7 @@ Values support three quoting styles for paths containing spaces or special chara
 | `linux_mem_offset` | integer | `-2900` | Linux memory offset (KB) |
 | `macos_mem_offset` | integer | `-1500` | macOS memory offset (KB) |
 | `max_solve_history` | integer | `100` | Max solve history entries |
+| `confirm_on_duplicate` | boolean | `false` | Confirm before overwriting duplicate problem in `solve_dir` |
 | `debug` | boolean | `false` | Debug logging |
 
 ### Variable Expansion

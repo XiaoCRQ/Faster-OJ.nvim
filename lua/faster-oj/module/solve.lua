@@ -82,10 +82,103 @@ function M.solve()
 	local problem_dir = utils.get_problem_dir_from(file_path)
 	local has_data = (problem_dir ~= "" and utils.dir_exists(problem_dir))
 
+	-- Determine target path for duplicate detection
+	local target_path
+	if has_data then
+		target_path = solve_dir .. "/" .. problem_name
+	else
+		target_path = solve_dir .. "/" .. filename
+	end
+
+	-- Duplicate detection: check if target already exists
+	local target_exists = (vim.fn.isdirectory(target_path) == 1)
+		or (vim.fn.filereadable(target_path) == 1)
+
+	if target_exists then
+		-- Guard: if source file is inside the target archive, do not delete
+		if abs_original == target_path
+			or vim.startswith(abs_original, target_path .. "/") then
+			log("INFO", "solve", "Source file is inside target archive, updating history only")
+			-- Remove old history entry and update with new entry at end
+			local history_path = solve_dir .. "/.history"
+			local lines = read_lines(history_path)
+			local new_lines = {}
+			for _, line in ipairs(lines) do
+				local parts = vim.split(line, "\t", { plain = true })
+				local match = false
+				for _, part in ipairs(parts) do
+					if part == target_path then
+						match = true
+						break
+					end
+				end
+				if not match then
+					table.insert(new_lines, line)
+				end
+			end
+			local history_parts = {}
+			if has_data then
+				table.insert(history_parts, abs_original)
+				table.insert(history_parts, abs_original)
+				table.insert(history_parts, target_path)
+			else
+				table.insert(history_parts, abs_original)
+			end
+			table.insert(history_parts, target_path)
+			table.insert(new_lines, table.concat(history_parts, "\t"))
+			write_lines(history_path, new_lines)
+			trim_history(history_path)
+			log("INFO", "solve", "History updated: " .. filename)
+			notify.show("History updated: " .. filename, "DONE")
+			return
+		end
+
+		local should_overwrite = true
+		if M.config.confirm_on_duplicate then
+			local choice = vim.fn.confirm(
+				"Problem '" .. problem_name .. "' already exists in solve directory. Overwrite?",
+				"&Yes\n&No", 2)
+			should_overwrite = (choice == 1)
+		end
+
+		if not should_overwrite then
+			log("INFO", "solve", "User declined overwrite for: " .. problem_name)
+			return
+		end
+
+		-- Remove old data from disk
+		if vim.fn.isdirectory(target_path) == 1 then
+			vim.fn.delete(target_path, "rf")
+		else
+			os.remove(target_path)
+		end
+
+		-- Remove old entry from history
+		local history_path = solve_dir .. "/.history"
+		local lines = read_lines(history_path)
+		local new_lines = {}
+		for _, line in ipairs(lines) do
+			local parts = vim.split(line, "\t", { plain = true })
+			local match = false
+			for _, part in ipairs(parts) do
+				if part == target_path then
+					match = true
+					break
+				end
+			end
+			if not match then
+				table.insert(new_lines, line)
+			else
+				log("INFO", "solve", "Removed old history entry for: " .. problem_name)
+			end
+		end
+		write_lines(history_path, new_lines)
+	end
+
 	local history_parts = {}
 
 	if has_data then
-		-- Step 1: 源文件 → 数据文件夹内
+		-- Step 1: source file → data folder
 		local src_in_data = problem_dir .. filename
 		local ok, err = uv.fs_rename(abs_original, src_in_data)
 		if not ok then
@@ -95,22 +188,20 @@ function M.solve()
 		table.insert(history_parts, abs_original)
 		table.insert(history_parts, src_in_data)
 
-		-- Step 2: 数据文件夹 → solve_dir
-		local data_target = solve_dir .. "/" .. problem_name
-		local pok, perr = uv.fs_rename(problem_dir, data_target)
+		-- Step 2: data folder → solve_dir
+		local pok, perr = uv.fs_rename(problem_dir, target_path)
 		if not pok then
-			-- 回滚 step 1
+			-- rollback step 1
 			uv.fs_rename(src_in_data, abs_original)
 			log("ERROR", "solve", "Move data dir failed: " .. (perr or ""))
 			return
 		end
 		table.insert(history_parts, problem_dir)
-		table.insert(history_parts, data_target)
+		table.insert(history_parts, target_path)
 
 		vim.cmd("bd!")
 	else
-		-- 单步: 源文件 → solve_dir
-		local target_path = solve_dir .. "/" .. filename
+		-- Single step: source file → solve_dir
 		local ok, err = uv.fs_rename(abs_original, target_path)
 		if not ok then
 			log("ERROR", "solve", "Move source failed: " .. (err or ""))
@@ -152,57 +243,68 @@ function M.solve_back()
 	end
 
 	local lines = read_lines(history_path)
-	local restored_path = nil -- 用于 auto_open
+	if #lines == 0 then
+		log("WARN", "solve_back", "History file empty")
+		return
+	end
 
-	while #lines > 0 do
-		local last = lines[#lines]
-		local parts = vim.split(last, "\t", { plain = true })
+	local restored_path = nil -- for auto_open
 
-		-- 必须为偶数个字段 (from, to 成对)
-		if #parts < 2 or #parts % 2 ~= 0 then
-			log("WARN", "solve_back", "Corrupted history line, skipped")
-			table.remove(lines)
+	-- Process only the last entry (stack/LIFO order)
+	local last = lines[#lines]
+	local parts = vim.split(last, "\t", { plain = true })
+
+	-- Must have even number of fields (from, to pairs)
+	if #parts < 2 or #parts % 2 ~= 0 then
+		log("WARN", "solve_back", "Corrupted history line, removing")
+		table.remove(lines)
+		if #lines == 0 then
+			uv.fs_unlink(history_path)
 		else
-			-- 反向遍历每对 (from, to), 执行 to → from
-			local failed = false
-			for i = #parts, 1, -2 do
-				local from = parts[i - 1] -- 原始位置
-				local to = parts[i] -- 当前位置
-				-- 确保目标目录存在
-				ensure_dir(vim.fn.fnamemodify(from, ":h"))
-				-- 检查源是否存在
-				if not utils.file_exists(to) and vim.fn.isdirectory(to) == 0 then
-					log("WARN", "solve_back", "Path not found: " .. to .. ", skipping entry")
-					failed = true
-					break
-				end
-				local ok, err = uv.fs_rename(to, from)
-				if not ok then
-					log("ERROR", "solve_back", "Restore failed: " .. to .. " → " .. from .. " (" .. (err or "") .. ")")
-					failed = true
-					break
-				end
-				-- 记录第一个还原的源文件路径用于 auto_open
-				if not restored_path and i == 2 then
-					restored_path = from
-				end
-			end
+			write_lines(history_path, lines)
+		end
+		return
+	end
 
-			if failed then
-				-- 终止本次撤销, 保留该行以便重试
-				log("WARN", "solve_back", "Undo incomplete, history preserved")
-				return
-			end
-
-			table.remove(lines)
+	-- Reverse each (from, to) pair: to → from
+	local failed = false
+	for i = #parts, 1, -2 do
+		local from = parts[i - 1] -- original location
+		local to = parts[i] -- current location
+		ensure_dir(vim.fn.fnamemodify(from, ":h"))
+		if not utils.file_exists(to) and vim.fn.isdirectory(to) == 0 then
+			log("WARN", "solve_back", "Path not found: " .. to .. ", removing entry")
+			failed = true
+			break
+		end
+		local ok, err = uv.fs_rename(to, from)
+		if not ok then
+			log("ERROR", "solve_back", "Restore failed: " .. to .. " → " .. from .. " (" .. (err or "") .. ")")
+			failed = true
+			break
+		end
+		-- Record the first restored source path for auto_open
+		if not restored_path and i == 2 then
+			restored_path = from
 		end
 	end
 
-	-- 写入清理后的 history
+	if failed then
+		log("WARN", "solve_back", "Entry removed from history")
+	end
+
+	-- Remove the processed entry (success or corrupted)
+	table.remove(lines)
+
+	-- Write back history
 	if #lines == 0 then
 		uv.fs_unlink(history_path)
 	else
 		write_lines(history_path, lines)
+	end
+
+	if failed then
+		return
 	end
 
 	if restored_path and M.config.auto_open then
