@@ -6,7 +6,6 @@
 local M = {}
 
 local uv = vim.uv or vim.loop
-local is_win = vim.fn.has("win32") == 1
 
 local ns = vim.api.nvim_create_namespace("FOJNotify")
 

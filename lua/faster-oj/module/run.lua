@@ -131,24 +131,65 @@ local function build_exec_cmd(cmd_raw, vars, tl_ms)
 	end, cmd_raw.args or {})
 
 	if is_win then
-		-- PowerShell: Start-Process + WaitForExit(timeout) + PeakWorkingSet64
-		local arg_str_parts = {}
-		for _, a in ipairs(user_args) do
-			table.insert(arg_str_parts, "'" .. a:gsub("'", "''") .. "'")
+		-- PowerShell with temp-file I/O redirection.
+		-- Start-Process does NOT forward the parent's stdio to the child,
+		-- so we write stdin to a temp file and redirect child stdout/stderr
+		-- to temp files, then read them back after the process exits.
+		local uid = tostring(uv.hrtime())
+		local temp_dir = M.config.temp_dir
+		local ok = os.execute('if not exist "' .. temp_dir .. '" mkdir "' .. temp_dir .. '" 2>nul')
+		if ok ~= 0 then
+			log("ERROR", "build_exec_cmd", "Failed to ensure temp dir: " .. temp_dir)
 		end
-		local joined_args = table.concat(arg_str_parts, ", ")
-		local tl_sec = math.floor(tl_ms / 1000) + 1
+
+		local in_file = temp_dir .. "\\foj_in_" .. uid .. ".tmp"
+		local out_file = temp_dir .. "\\foj_out_" .. uid .. ".tmp"
+		local err_file = temp_dir .. "\\foj_err_" .. uid .. ".tmp"
+
+		local function esc(s)
+			return s:gsub("'", "''")
+		end
+
+		local arg_parts = {}
+		for _, a in ipairs(user_args) do
+			table.insert(arg_parts, "'" .. esc(a) .. "'")
+		end
+		local arg_list = #arg_parts > 0
+			and ("-ArgumentList " .. table.concat(arg_parts, ", "))
+			or ""
+
+		local tl_ms_int = tl_ms + 500
+
 		local ps_script = string.format(
-			"$p = Start-Process -FilePath '%s' -ArgumentList %s -NoNewWindow -PassThru; "
-				.. "$p.WaitForExit(%d); "
-				.. "if (!$p.HasExited) { $p.Kill(); [Console]::Error.WriteLine('TIME_LIMIT_EXCEEDED') }; "
-				.. "[Console]::Error.WriteLine('MEM_PEAK:' + $p.PeakWorkingSet64); "
-				.. "exit $p.ExitCode",
-			user_exec:gsub("'", "''"),
-			joined_args ~= "" and joined_args or "''",
-			tl_sec * 1000
+			"$if='%s';$of='%s';$ef='%s';"
+				.. "try{"
+				.. "$input=[Console]::In.ReadToEnd();"
+				.. "[IO.File]::WriteAllText($if,$input,"
+				.. "[Text.UTF8Encoding]::new($false));"
+				.. "$p=Start-Process -FilePath '%s' %s -NoNewWindow -PassThru"
+				.. " -RedirectStandardInput $if -RedirectStandardOutput $of -RedirectStandardError $ef;"
+				.. "if(!$p){throw 'Start-Process returned null'};"
+				.. "$p.WaitForExit(%d)|Out-Null;"
+				.. "if(!$p.HasExited){$p.Kill();[Console]::Error.WriteLine('TIME_LIMIT_EXCEEDED')};"
+				.. "if(Test-Path $of){[Console]::Out.Write([IO.File]::ReadAllText($of))};"
+				.. "if(Test-Path $ef){$ec=[IO.File]::ReadAllText($ef);"
+				.. "if($ec){[Console]::Error.Write($ec)}};"
+				.. "[Console]::Error.WriteLine('MEM_PEAK:'+$p.PeakWorkingSet64);"
+				.. "exit $p.ExitCode"
+				.. "}catch{"
+				.. "[Console]::Error.WriteLine('FOJ_ERR:'+$_.Exception.Message);"
+				.. "exit 1"
+				.. "}finally{"
+				.. "try{Remove-Item $if,$of,$ef -Force -ErrorAction Stop}catch{}"
+				.. "}",
+			esc(in_file),
+			esc(out_file),
+			esc(err_file),
+			esc(user_exec),
+			arg_list,
+			tl_ms_int
 		)
-		log("INFO", "build_exec_cmd", "Windows PowerShell wrapper")
+		log("INFO", "build_exec_cmd", "Windows PowerShell with temp-file I/O redirection")
 		return "powershell", { "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script }
 	end
 
@@ -187,6 +228,11 @@ local function parse_memory_and_err(raw_err)
 	local max_rss_kb, clean_err = 0, raw_err
 
 	if is_win then
+		-- Check for infrastructure errors from PowerShell first
+		local fo_err = raw_err:match("FOJ_ERR:(.+)")
+		if fo_err then
+			return 0, "[System Error] " .. fo_err:gsub("[\r\n].*", "")
+		end
 		local val = raw_err:match("MEM_PEAK:(%d+)")
 		if val then
 			max_rss_kb = math.floor(tonumber(val) / 1024)
@@ -237,8 +283,8 @@ function M.compile(file_path, need_compile, on_compile_finish)
 		return utils.expand(a, vars)
 	end, cmd_raw.args or {})
 
-	-- 确保 .output/ 目录存在 (os.execute 安全于任何上下文, mkdir -p 幂等)
-	os.execute('mkdir -p "' .. vars.DIR .. '/.output" 2>/dev/null')
+	-- Ensure .output/ directory exists (compile is called from main context, safe for vim.fn.mkdir)
+	vim.fn.mkdir(vars.DIR .. '/.output', 'p')
 
 	log("INFO", "compile", "Compiling " .. file_path)
 	log("INFO", "compile", "Exec: " .. exec .. " Args: " .. vim.inspect(args))
@@ -349,9 +395,11 @@ function M.run_single(cmd_raw, vars, input, tl_ms, ml_mb, std_out, cb)
 		end
 	)
 
-	-- uv timer 作为超时后备 (Linux 上 timeout 命令是主, timer 是后备)
+	-- uv timer as timeout fallback.
+	-- On Windows, extend the grace period so PowerShell's internal WaitForExit
+	-- and temp-file output readback can finish before the UV timer fires.
 	timer = uv.new_timer()
-	timer:start(tl_ms + 500, 0, force_kill)
+	timer:start(tl_ms + (is_win and 2500 or 500), 0, force_kill)
 
 	if input and input ~= "" then
 		stdin:write(input, function()

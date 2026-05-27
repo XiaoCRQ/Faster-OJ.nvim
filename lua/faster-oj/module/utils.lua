@@ -5,7 +5,6 @@
 local M = {}
 
 local uv = vim.uv or vim.loop
-local is_win = vim.fn.has("win32") == 1
 
 local LANGUAGE_MAP = {
 	c = "c",
