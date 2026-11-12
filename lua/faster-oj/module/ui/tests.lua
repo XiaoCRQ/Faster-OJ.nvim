@@ -1,6 +1,7 @@
 ---@module "faster-oj.module.ui.tests"
 
 local ui = require("faster-oj.module.ui")
+local tc_view = require("faster-oj.module.ui.tc_view")
 local M = {}
 
 local GROUP = "TestUI"
@@ -33,9 +34,9 @@ local function log(level, func, msg)
 end
 
 function M.setup(cfg)
-	M.config = cfg
-	M.current_style = cfg.tc_ui and cfg.tc_ui.default_style or "float"
-	local hls = cfg.highlights or {}
+	M.config = cfg or {}
+	M.current_style = M.config.tc_ui and M.config.tc_ui.default_style or "float"
+	local hls = M.config.highlights or {}
 
 	local function init_hl_group(prefix, colors)
 		colors = colors or {}
@@ -51,14 +52,12 @@ end
 
 ---Get current effective style
 local function get_style()
-	return M.current_style or (M.config.tc_ui and M.config.tc_ui.default_style) or "float"
+	return tc_view.get_style(M.current_style, M.config and M.config.tc_ui)
 end
 
 ---Get style-specific config table
 local function get_style_config()
-	local ui_cfg = M.config.tc_ui
-	local s = get_style()
-	return ui_cfg[s] or ui_cfg.float
+	return tc_view.get_style_config(M.config and M.config.tc_ui, get_style())
 end
 
 ---Set buffer content with highlights
@@ -107,6 +106,17 @@ local function update_details(index)
 	set_buf_content("so", vim.split(tc.output or "", "\n"), out_hls)
 end
 
+---Focus a TC row and refresh the detail panels immediately.
+---Keymaps call this directly because nvim_win_set_cursor does not reliably
+---fire CursorMoved synchronously.
+---@param row integer 1-based row in the TC list (row 1 is the header)
+local function select_row(row)
+	row = math.max(2, math.min(row, M.state.size + 1))
+	tc_view.focus_row(GROUP, get_style(), row)
+	M.state.current_idx = row - 1
+	update_details(M.state.current_idx)
+end
+
 ---Update TC list and details
 function M.update(size, testcases)
 	vim.schedule(function()
@@ -142,69 +152,58 @@ function M.update(size, testcases)
 	end)
 end
 
----Toggle between float and split styles
-local function do_toggle_style(old_style, new_style)
-	-- Save state
-	local saved_size = M.state.size
-	local saved_cases = {}
-	for i, tc in ipairs(M.state.testcases) do
-		saved_cases[i] = {
-			input = tc.input,
-			expected = tc.expected,
-			output = tc.output,
-			diff = tc.diff,
-			state = tc.state,
-			used_time = tc.used_time,
-			used_memory = tc.used_memory,
-		}
+---Set up the current instance (open / style toggle / resize).
+---@param style string
+local function setup_viewer(style)
+	local inst = ui.get_instance(GROUP, style)
+	if not inst or not inst.bufs then
+		return
 	end
 
-	-- Close old style
-	ui.close_style(GROUP, old_style)
+	tc_view.attach({
+		group = GROUP,
+		style = style,
+		inst = inst,
+		row_range = function()
+			return 2, M.state.size + 1
+		end,
+		on_row = function(row)
+			M.state.current_idx = row - 1
+			update_details(M.state.current_idx)
+		end,
+		on_leave = function()
+			if M.is_open() then
+				M.close()
+			end
+		end,
+	})
 
-	-- Open new style
-	M.current_style = new_style
-	local cfg = get_style_config()
-	ui.open(GROUP, new_style, cfg, TITLES, WIN_OPTS, function()
-		local inst = ui.get_instance(GROUP, new_style)
-		local tc_buf = inst.bufs.tc
-
-		-- BufWinLeave cleanup
-		for _, buf in pairs(inst.bufs) do
-			vim.api.nvim_create_autocmd("BufWinLeave", {
-				buffer = buf,
-				once = true,
-				callback = function()
-					vim.schedule(function()
-						if M.is_open() then
-							M.close()
-						end
-					end)
-				end,
-			})
+	M.bind_keys()
+	M.update(M.state.size, M.state.testcases)
+	-- M.update renders on the next tick; focus after its buffer rewrite.
+	vim.schedule(function()
+		if ui.get_instance(GROUP, style) ~= inst then
+			return
 		end
+		tc_view.focus_row(GROUP, style, M.state.current_idx + 1)
+	end)
+end
 
-		M.bind_keys()
+---Toggle between float and split styles
+local function do_toggle_style(old_style, new_style)
+	local saved = {
+		size = M.state.size,
+		cases = M.state.testcases,
+		idx = M.state.current_idx,
+	}
 
-		vim.api.nvim_clear_autocmds({ buffer = tc_buf, event = "CursorMoved" })
-		vim.api.nvim_create_autocmd("CursorMoved", {
-			buffer = tc_buf,
-			callback = function()
-				local cursor = vim.api.nvim_win_get_cursor(0)
-				local r = math.max(2, cursor[1])
-				if r ~= cursor[1] or cursor[2] ~= 5 then
-					vim.api.nvim_win_set_cursor(0, { r, 5 })
-				end
-				M.state.current_idx = r - 1
-				update_details(M.state.current_idx)
-			end,
-		})
-
-		-- Restore state
-		M.state.size = saved_size
-		M.state.testcases = saved_cases
-		M.state.current_idx = 1
-		M.update(saved_size, saved_cases)
+	ui.close_style(GROUP, old_style)
+	M.current_style = new_style
+	ui.open(GROUP, new_style, get_style_config(), TITLES, WIN_OPTS, function()
+		M.state.size = saved.size
+		M.state.testcases = saved.cases
+		M.state.current_idx = math.min(math.max(saved.idx, 1), math.max(saved.size, 1))
+		setup_viewer(new_style)
 	end)
 end
 
@@ -228,80 +227,66 @@ function M.bind_keys()
 	if not inst then
 		return
 	end
+	local style = get_style()
 	local maps = M.config.tc_ui.mappings
 
-	for key, buf in pairs(inst.bufs) do
-		local opts = { buffer = buf, nowait = true, silent = true }
+	local function focus_tc()
+		local win = ui.get_win_by_key(GROUP, "tc", style)
+		if win then
+			vim.api.nvim_set_current_win(win)
+			tc_view.focus_row(GROUP, style, M.state.current_idx + 1)
+		end
+	end
 
-		-- Toggle style key on all buffers
-		if maps.toggle_style then
-			for _, k in ipairs(maps.toggle_style) do
-				vim.keymap.set("n", k, M.toggle_style, opts)
+	local function move(step)
+		local row = vim.api.nvim_win_get_cursor(0)[1]
+		local target = row + step
+		if target >= 2 and target <= M.state.size + 1 then
+			select_row(target)
+		end
+	end
+
+	local function focus_details()
+		local win = ui.get_win_by_key(GROUP, "si", style)
+		if win then
+			vim.api.nvim_set_current_win(win)
+		end
+	end
+
+	local function jump(key, step)
+		local curr_idx = 1
+		for i, v in ipairs(DETAIL_CYCLE) do
+			if v == key then
+				curr_idx = i
+				break
 			end
 		end
+		local next_key = DETAIL_CYCLE[(curr_idx + step - 1) % #DETAIL_CYCLE + 1]
+		local win = ui.get_win_by_key(GROUP, next_key, style)
+		if win then
+			vim.api.nvim_set_current_win(win)
+		end
+	end
 
+	for key, buf in pairs(inst.bufs) do
+		tc_view.bind(buf, maps.toggle_style, M.toggle_style)
 		if key == "tc" then
-			for _, k in ipairs(maps.close) do
-				vim.keymap.set("n", k, M.close, opts)
-			end
-			for _, k in ipairs(maps.view) do
-				vim.keymap.set("n", k, function()
-					local win = ui.get_win_by_key(GROUP, "si", get_style())
-					if win then
-						vim.api.nvim_set_current_win(win)
-					end
-				end, opts)
-			end
-			for _, k in ipairs(maps.focus_next) do
-				vim.keymap.set("n", k, function()
-					local r = vim.api.nvim_win_get_cursor(0)[1]
-					if r < M.state.size + 1 then
-						vim.api.nvim_win_set_cursor(0, { r + 1, 2 })
-					end
-				end, opts)
-			end
-			for _, k in ipairs(maps.focus_prev) do
-				vim.keymap.set("n", k, function()
-					local r = vim.api.nvim_win_get_cursor(0)[1]
-					if r > 2 then
-						vim.api.nvim_win_set_cursor(0, { r - 1, 2 })
-					end
-				end, opts)
-			end
+			tc_view.bind(buf, maps.close, M.close)
+			tc_view.bind(buf, maps.view, focus_details)
+			tc_view.bind(buf, maps.focus_next, function()
+				move(1)
+			end)
+			tc_view.bind(buf, maps.focus_prev, function()
+				move(-1)
+			end)
 		else
-			for _, k in ipairs(maps.close) do
-				vim.keymap.set("n", k, function()
-					local win = ui.get_win_by_key(GROUP, "tc", get_style())
-					if win then
-						vim.api.nvim_set_current_win(win)
-						vim.api.nvim_win_set_cursor(win, { M.state.current_idx + 1, 2 })
-					end
-				end, opts)
-			end
-			local function jump(step)
-				local curr_idx = 1
-				for i, v in ipairs(DETAIL_CYCLE) do
-					if v == key then
-						curr_idx = i
-						break
-					end
-				end
-				local next_key = DETAIL_CYCLE[(curr_idx + step - 1) % #DETAIL_CYCLE + 1]
-				local win = ui.get_win_by_key(GROUP, next_key, get_style())
-				if win then
-					vim.api.nvim_set_current_win(win)
-				end
-			end
-			for _, k in ipairs(maps.view_focus_next) do
-				vim.keymap.set("n", k, function()
-					jump(1)
-				end, opts)
-			end
-			for _, k in ipairs(maps.view_focus_prev) do
-				vim.keymap.set("n", k, function()
-					jump(-1)
-				end, opts)
-			end
+			tc_view.bind(buf, maps.close, focus_tc)
+			tc_view.bind(buf, maps.view_focus_next, function()
+				jump(key, 1)
+			end)
+			tc_view.bind(buf, maps.view_focus_prev, function()
+				jump(key, -1)
+			end)
 		end
 	end
 end
@@ -325,40 +310,8 @@ function M.show(style)
 		local other = (s == "float") and "split" or "float"
 		ui.close_style(GROUP, other)
 
-		local cfg = get_style_config()
-		ui.open(GROUP, s, cfg, TITLES, WIN_OPTS, function()
-			local inst = ui.get_instance(GROUP, s)
-			local tc_buf = inst.bufs.tc
-
-			for _, buf in pairs(inst.bufs) do
-				vim.api.nvim_create_autocmd("BufWinLeave", {
-					buffer = buf,
-					callback = function()
-						vim.schedule(function()
-							if M.is_open() then
-								M.close()
-							end
-						end)
-					end,
-				})
-			end
-
-			M.bind_keys()
-
-			vim.api.nvim_clear_autocmds({ buffer = tc_buf, event = "CursorMoved" })
-			vim.api.nvim_create_autocmd("CursorMoved", {
-				buffer = tc_buf,
-				callback = function()
-					local cursor = vim.api.nvim_win_get_cursor(0)
-					local r = math.max(2, cursor[1])
-					if r ~= cursor[1] or cursor[2] ~= 5 then
-						vim.api.nvim_win_set_cursor(0, { r, 5 })
-					end
-					M.state.current_idx = r - 1
-					update_details(M.state.current_idx)
-				end,
-			})
-			M.update(M.state.size, M.state.testcases)
+		ui.open(GROUP, s, get_style_config(), TITLES, WIN_OPTS, function()
+			setup_viewer(s)
 		end)
 	end)
 end

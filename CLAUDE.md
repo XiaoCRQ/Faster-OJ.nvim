@@ -34,6 +34,7 @@ lua/faster-oj/
     ├── utils.lua           # File I/O, JSON r/w, variable expansion, test case helpers
     └── ui/
         ├── init.lua        # Layout engine — recursive weight-based rect calculation
+        ├── tc_view.lua     # Shared TC-list cursor/keymap/lifecycle helpers
         ├── tests.lua       # Judge result viewer (TC list + detail panels)
         ├── tests_edit.lua  # TC editor: one open TC, in-memory edits, explicit save
         ├── confirm.lua     # Floating choice dialog (Yes/No/Cancel; Yes/No for delete)
@@ -53,6 +54,8 @@ Neovim API functions (`vim.fn.mkdir`, `nvim_buf_get_name`, etc.) MUST NOT be cal
 
 ### UI: custom layout engine
 Config defines a recursive `{weight, content}` tree. `calculate_rects()` computes absolute coords; `ui.open()` creates/moves floating windows with rounded borders. On `VimResized`, the engine closes and reopens instances; viewers restore their state in the on-created callback. All UI modules use `vim.schedule()` for rendering.
+
+TC-list cursor policy (`ui/tc_view.lua`): the TC-list viewers (`tests.lua`, `tests_edit.lua`, `stress.lua`) pin the list cursor to column 5 and drive row changes synchronously from their keymaps (`focus_row()` + direct callback). The buffer-local `CursorMoved` autocmd is only a fallback for native/mouse movement — `nvim_win_set_cursor` does not guarantee a synchronous `CursorMoved`, so refreshes must never rely on it. `tc_view.attach()` also owns the `BufWinLeave` teardown hook and ignores stale callbacks by comparing engine instance identity.
 
 ### Logging: unified format
 All modules use: `log(level, func, msg)` → `[FOJ][<module>][LEVEL] func: msg`. Levels: INFO, WARN, ERROR. Only outputs when `config.debug == true`. All runtime strings are English.

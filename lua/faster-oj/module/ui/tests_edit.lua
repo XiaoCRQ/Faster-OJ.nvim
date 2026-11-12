@@ -2,6 +2,7 @@
 
 local utils = require("faster-oj.module.utils")
 local ui = require("faster-oj.module.ui")
+local tc_view = require("faster-oj.module.ui.tc_view")
 local notify = require("faster-oj.module.notify")
 local confirm = require("faster-oj.module.ui.confirm")
 
@@ -21,33 +22,25 @@ local EDIT_CYCLE = { "si", "so" }
 
 ---One TC is open at a time.
 ---disk_count:     number of .in/.out pairs on disk.
----test_count:     TC-list rows; equals disk_count + (pending_new and 1 or 0).
 ---current_index:  1-based index of the open TC.
 ---pending_new:    the open TC is a new case that has not been written yet.
----saved:          normalized disk snapshot of the open TC (one trailing newline stripped).
----live:           latest buffer content of the open TC.
----raw_input/raw_output: exact on-disk bytes of the open TC (nil for a new TC).
----is_updating:    >0 while rendering buffers (suppresses capture callbacks).
----switching:      a TC switch decision is in progress.
----pending_confirm: a confirmation window is open.
----gen:            generation token; stale scheduled callbacks compare it.
-M.state = {
-	problem_dir = "",
-	problem_name = "",
-	disk_count = 0,
-	test_count = 0,
-	current_index = 1,
-	pending_new = false,
-	saved = { input = "", output = "" },
-	live = { input = "", output = "" },
-	raw_input = nil,
-	raw_output = nil,
-	is_updating = 0,
-	switching = false,
-	pending_confirm = false,
-	gen = 0,
-}
+---raw:            exact on-disk bytes of the open TC (nil when missing/new).
+---live:           latest in-memory content (buffer content after capture).
+---busy:           a switch/add/delete/close decision is in progress.
+local function fresh_state()
+	return {
+		problem_dir = "",
+		problem_name = "",
+		disk_count = 0,
+		current_index = 1,
+		pending_new = false,
+		raw = { input = nil, output = nil },
+		live = { input = "", output = "" },
+		busy = false,
+	}
+end
 
+M.state = fresh_state()
 M.current_style = nil
 
 ---@param level string
@@ -61,19 +54,17 @@ end
 
 function M.setup(cfg)
 	M.config = cfg or {}
-	M.current_style = cfg.tc_edit_ui and cfg.tc_edit_ui.default_style or "float"
+	M.current_style = M.config.tc_edit_ui and M.config.tc_edit_ui.default_style or "float"
 end
 
 ---Get current effective style
 local function get_style()
-	return M.current_style or (M.config.tc_edit_ui and M.config.tc_edit_ui.default_style) or "float"
+	return tc_view.get_style(M.current_style, M.config and M.config.tc_edit_ui)
 end
 
 ---Get style-specific config table
 local function get_style_config()
-	local ui_cfg = M.config.tc_edit_ui
-	local s = get_style()
-	return ui_cfg[s] or ui_cfg.float
+	return tc_view.get_style_config(M.config and M.config.tc_edit_ui, get_style())
 end
 
 local function confirm_enabled()
@@ -89,33 +80,38 @@ local function get_instance()
 	return ui.get_instance(GROUP, get_style())
 end
 
----Set buffer lines without triggering capture callbacks.
-local function set_buffer_lines(buf, lines)
+---Total rows shown in the TC list (disk cases + optional pending case).
+local function tc_count()
+	return M.state.disk_count + (M.state.pending_new and 1 or 0)
+end
+
+---Set buffer lines. `lock` restores nomodifiable (TC list only).
+local function set_lines(buf, lines, lock)
 	if not buf or not vim.api.nvim_buf_is_valid(buf) then
 		return
 	end
-	M.state.is_updating = M.state.is_updating + 1
 	vim.bo[buf].modifiable = true
 	pcall(vim.api.nvim_buf_set_lines, buf, 0, -1, false, lines or {})
-	M.state.is_updating = M.state.is_updating - 1
+	if lock then
+		vim.bo[buf].modifiable = false
+	end
 end
 
----Render the current TC from memory.
+---Render the open TC from memory.
 local function render_current()
 	local inst = get_instance()
 	if not inst or not inst.bufs then
 		return
 	end
-	set_buffer_lines(inst.bufs.si, vim.split(M.state.live.input or "", "\n"))
-	set_buffer_lines(inst.bufs.so, vim.split(M.state.live.output or "", "\n"))
-	if inst.bufs.tc and vim.api.nvim_buf_is_valid(inst.bufs.tc) then
-		vim.bo[inst.bufs.tc].modifiable = false
-	end
+	set_lines(inst.bufs.si, vim.split(M.state.live.input or "", "\n"))
+	set_lines(inst.bufs.so, vim.split(M.state.live.output or "", "\n"))
 end
 
 ---Capture the open buffers into `live`.
-local function capture_current()
-	local inst = get_instance()
+---@param inst? table  instance to read from (defaults to the current one)
+---@return boolean
+local function capture_current(inst)
+	inst = inst or get_instance()
 	if not inst or not inst.bufs then
 		return false
 	end
@@ -128,14 +124,18 @@ local function capture_current()
 	return true
 end
 
-local function needs_save_prompt()
+local function has_unsaved_changes()
 	if M.state.pending_new then
 		return true
 	end
 	capture_current()
-	-- `saved` is normalized; a trailing blank line in the buffer is not a real edit.
-	return normalize(M.state.live.input) ~= M.state.saved.input
-		or normalize(M.state.live.output) ~= M.state.saved.output
+	-- Compare normalized text: one trailing blank line is not a real edit.
+	return normalize(M.state.live.input) ~= normalize(M.state.raw.input)
+		or normalize(M.state.live.output) ~= normalize(M.state.raw.output)
+end
+
+local function focus_tc_row()
+	tc_view.focus_row(GROUP, get_style(), M.state.current_index)
 end
 
 local function update_tc_list()
@@ -143,35 +143,21 @@ local function update_tc_list()
 	if not inst or not inst.bufs or not inst.bufs.tc then
 		return
 	end
-	local buf = inst.bufs.tc
 	local lines = {}
-	for i = 1, M.state.test_count do
-		lines[#lines + 1] = "  TC " .. (i - 1)
+	for i = 1, tc_count() do
+		lines[i] = "  TC " .. (i - 1)
 	end
-	M.state.is_updating = M.state.is_updating + 1
-	vim.bo[buf].modifiable = true
-	pcall(vim.api.nvim_buf_set_lines, buf, 0, -1, false, lines)
-	vim.bo[buf].modifiable = false
-	M.state.is_updating = M.state.is_updating - 1
-end
-
-local function set_tc_cursor(row)
-	local win = ui.get_win_by_key(GROUP, "tc", get_style())
-	if win then
-		pcall(vim.api.nvim_win_set_cursor, win, { row, 2 })
-	end
+	set_lines(inst.bufs.tc, lines, true)
 end
 
 ---Load an existing TC from disk into the open buffers.
 local function load_case(index)
 	local dir = M.state.problem_dir
 	local file_idx = index - 1
-	local raw_in = utils.read_file(dir .. file_idx .. ".in")
-	local raw_out = utils.read_file(dir .. file_idx .. ".out")
-	M.state.raw_input = raw_in
-	M.state.raw_output = raw_out
-	M.state.saved = { input = normalize(raw_in), output = normalize(raw_out) }
-	M.state.live = { input = M.state.saved.input, output = M.state.saved.output }
+	M.state.raw.input = utils.read_file(dir .. file_idx .. ".in")
+	M.state.raw.output = utils.read_file(dir .. file_idx .. ".out")
+	M.state.live.input = normalize(M.state.raw.input)
+	M.state.live.output = normalize(M.state.raw.output)
 	M.state.current_index = index
 	render_current()
 end
@@ -197,34 +183,24 @@ local function scan_disk_count(dir)
 	return max_idx + 1
 end
 
----Drop the pending new TC (memory only).
-local function discard_current_pending()
-	if not M.state.pending_new then
-		return
-	end
-	M.state.pending_new = false
-	M.state.test_count = M.state.disk_count
-	if M.state.current_index > M.state.test_count then
-		M.state.current_index = math.max(M.state.test_count, 1)
-	end
-	update_tc_list()
-end
-
 ---Discard unsaved edits (and a pending new TC, if any).
 local function discard_current_edits()
-	discard_current_pending()
-	M.state.live = { input = M.state.saved.input, output = M.state.saved.output }
+	if M.state.pending_new then
+		M.state.pending_new = false
+		M.state.current_index = math.min(M.state.current_index, math.max(tc_count(), 1))
+		update_tc_list()
+	end
+	M.state.live.input = normalize(M.state.raw.input)
+	M.state.live.output = normalize(M.state.raw.output)
 	render_current()
 end
 
 ---Prepare a new unsaved TC as the open case.
 local function begin_pending_case()
 	M.state.pending_new = true
-	M.state.test_count = M.state.disk_count + 1
-	M.state.current_index = M.state.test_count
-	M.state.raw_input, M.state.raw_output = nil, nil
-	M.state.saved = { input = "", output = "" }
-	M.state.live = { input = "", output = "" }
+	M.state.current_index = tc_count()
+	M.state.raw.input, M.state.raw.output = nil, nil
+	M.state.live.input, M.state.live.output = "", ""
 end
 
 ---Save the open TC to disk and refresh problem.json.
@@ -238,19 +214,21 @@ function M.save()
 	capture_current()
 	local dir = M.state.problem_dir
 	local file_idx = M.state.current_index - 1
+	local was_pending = M.state.pending_new
 	local in_content, out_content
 
-	if M.state.pending_new then
+	if was_pending then
 		in_content, out_content = M.state.live.input, M.state.live.output
 	else
 		-- Preserve exact bytes for unchanged TCs.
-		local same_in = M.state.raw_input ~= nil and M.state.live.input == normalize(M.state.raw_input)
-		local same_out = M.state.raw_output ~= nil and M.state.live.output == normalize(M.state.raw_output)
-		in_content = same_in and M.state.raw_input or M.state.live.input
-		out_content = same_out and M.state.raw_output or M.state.live.output
+		in_content = (M.state.raw.input ~= nil and M.state.live.input == normalize(M.state.raw.input))
+			and M.state.raw.input
+			or M.state.live.input
+		out_content = (M.state.raw.output ~= nil and M.state.live.output == normalize(M.state.raw.output))
+			and M.state.raw.output
+			or M.state.live.output
 	end
 
-	local was_pending = M.state.pending_new
 	local function cleanup_partial()
 		-- A failed first save must not leave orphan TC files behind.
 		if was_pending then
@@ -271,10 +249,7 @@ function M.save()
 		return false
 	end
 
-	local new_disk_count = M.state.disk_count + (was_pending and 1 or 0)
-
-	local json_path = dir .. "problem.json"
-	local data = utils.read_json(json_path)
+	local data = utils.read_json(dir .. "problem.json")
 	if type(data) ~= "table" then
 		data = {
 			url = "",
@@ -283,8 +258,8 @@ function M.save()
 			timeLimit = M.config.default_time_limit or 2000,
 		}
 	end
-	data.testCount = new_disk_count
-	if not utils.write_json(json_path, data) then
+	data.testCount = M.state.disk_count + (was_pending and 1 or 0)
+	if not utils.write_json(dir .. "problem.json", data) then
 		cleanup_partial()
 		notify.show("Failed to save problem metadata", "ERROR")
 		return false
@@ -292,14 +267,11 @@ function M.save()
 
 	if was_pending then
 		M.state.pending_new = false
-		M.state.disk_count = new_disk_count
-		M.state.test_count = M.state.disk_count
-		update_tc_list()
+		M.state.disk_count = data.testCount
 	end
 
-	M.state.raw_input, M.state.raw_output = in_content, out_content
-	M.state.saved = { input = normalize(in_content), output = normalize(out_content) }
-	M.state.live = { input = M.state.saved.input, output = M.state.saved.output }
+	M.state.raw.input, M.state.raw.output = in_content, out_content
+	M.state.live.input, M.state.live.output = normalize(in_content), normalize(out_content)
 
 	notify.show("Problem data saved", "INFO")
 	log("INFO", "save", string.format("Saved TC %d to %s", file_idx, dir))
@@ -307,153 +279,121 @@ function M.save()
 end
 
 function M.reset_state()
-	M.state.problem_dir = ""
-	M.state.problem_name = ""
-	M.state.disk_count = 0
-	M.state.test_count = 0
-	M.state.current_index = 1
-	M.state.pending_new = false
-	M.state.saved = { input = "", output = "" }
-	M.state.live = { input = "", output = "" }
-	M.state.raw_input, M.state.raw_output = nil, nil
-	M.state.is_updating = 0
-	M.state.switching = false
-	M.state.pending_confirm = false
+	M.state = fresh_state()
 end
 
----Resolve unsaved changes before closing/switching the open TC.
+---Resolve unsaved edits, then run `action`.
 ---@param message string
----@param on_proceed fun()
----@param on_cancel fun()
-local function resolve_unsaved(message, on_proceed, on_cancel)
-	if not needs_save_prompt() then
-		on_proceed()
-		return
+---@param action fun()
+---@param on_cancel? fun()
+---@return boolean started false when another decision is already pending
+local function with_unsaved(message, action, on_cancel)
+	if M.state.busy then
+		return false
+	end
+	M.state.busy = true
+
+	local function proceed()
+		M.state.busy = false
+		action()
+	end
+
+	local function cancel()
+		M.state.busy = false
+		if on_cancel then
+			on_cancel()
+		else
+			focus_tc_row()
+		end
+	end
+
+	if not has_unsaved_changes() then
+		proceed()
+		return true
 	end
 
 	if not confirm_enabled() then
-		log("INFO", "resolve_unsaved", "Discarding unsaved changes (confirmation disabled)")
+		log("INFO", "with_unsaved", "Discarding unsaved changes (confirmation disabled)")
 		discard_current_edits()
-		on_proceed()
-		return
+		proceed()
+		return true
 	end
 
-	M.state.pending_confirm = true
 	local opened = confirm.open({
 		title = "Unsaved Changes",
 		message = message,
 		default = "save",
-		on_choice = function(action)
-			M.state.pending_confirm = false
-			if action == "save" then
+		on_choice = function(choice)
+			if choice == "save" then
 				if M.save() then
-					on_proceed()
+					proceed()
 				else
-					on_cancel()
+					cancel()
 				end
-			elseif action == "discard" then
+			elseif choice == "discard" then
 				discard_current_edits()
-				on_proceed()
+				proceed()
 			else
-				on_cancel()
+				cancel()
 			end
 		end,
 	})
 	if not opened then
-		M.state.pending_confirm = false
 		notify.show("Resolve the pending dialog first", "WARN")
-		on_cancel()
+		cancel()
 	end
+	return true
 end
 
 ---Switch the open TC (TC list cursor moved).
 ---@param target integer 1-based index
 function M.request_switch(target)
-	if target < 1 or target > M.state.test_count then
+	local count = tc_count()
+	if target < 1 or target > count or target == M.state.current_index then
 		return
 	end
-	if target == M.state.current_index then
-		return
-	end
-	if M.state.switching or M.state.pending_confirm then
-		return
-	end
-
-	M.state.switching = true
-	local saved_index = M.state.current_index
-
-	local function do_switch()
-		M.state.switching = false
-		local idx = math.min(target, math.max(M.state.test_count, 1))
-		M.state.current_index = idx
-		update_tc_list()
-		load_case(idx)
-		set_tc_cursor(idx)
-	end
-
-	local function cancel_switch()
-		M.state.switching = false
-		set_tc_cursor(saved_index)
-	end
-
-	resolve_unsaved(string.format("TC %d has unsaved changes. Save before switching?", saved_index - 1), do_switch, cancel_switch)
+	with_unsaved(
+		string.format("TC %d has unsaved changes. Save before switching?", M.state.current_index - 1),
+		function()
+			M.state.current_index = target
+			load_case(target)
+			tc_view.focus_row(GROUP, get_style(), target)
+		end
+	)
 end
 
 ---Create a new pending TC. It always counts as dirty until saved.
 function M.add()
-	if M.state.switching or M.state.pending_confirm then
-		return
-	end
-
-	M.state.switching = true
-	local saved_index = M.state.current_index
-
-	local function create_new()
-		M.state.switching = false
-		begin_pending_case()
-		update_tc_list()
-		render_current()
-		set_tc_cursor(M.state.current_index)
-	end
-
-	resolve_unsaved(
-		string.format("TC %d has unsaved changes. Save before creating a new TC?", saved_index - 1),
-		create_new,
+	with_unsaved(
+		string.format("TC %d has unsaved changes. Save before creating a new TC?", M.state.current_index - 1),
 		function()
-			M.state.switching = false
-			set_tc_cursor(saved_index)
+			begin_pending_case()
+			update_tc_list()
+			render_current()
+			tc_view.focus_row(GROUP, get_style(), M.state.current_index)
 		end
 	)
 end
 
 ---Delete the open TC immediately (with confirmation when enabled).
 function M.delete_current()
-	if M.state.switching or M.state.pending_confirm then
-		return
-	end
-	if M.state.test_count <= 1 then
+	if M.state.busy or tc_count() <= 1 then
 		return
 	end
 
 	local idx = M.state.current_index
-
 	local function do_delete()
 		if M.state.pending_new then
 			M.state.pending_new = false
-			M.state.test_count = M.state.disk_count
 		else
-			local count_before = M.state.disk_count
-			utils.delete_test_case(M.state.problem_dir, idx - 1, count_before)
-			M.state.disk_count = count_before - 1
-			M.state.test_count = M.state.disk_count
+			utils.delete_test_case(M.state.problem_dir, idx - 1, M.state.disk_count)
+			M.state.disk_count = M.state.disk_count - 1
 			utils.update_test_count(M.state.problem_dir, M.state.disk_count)
 		end
-
-		local new_idx = math.min(idx, math.max(M.state.test_count, 1))
-		M.state.current_index = new_idx
+		M.state.current_index = math.min(idx, math.max(tc_count(), 1))
 		update_tc_list()
-		load_case(new_idx)
-		set_tc_cursor(new_idx)
+		load_case(M.state.current_index)
+		tc_view.focus_row(GROUP, get_style(), M.state.current_index)
 		notify.show("Test case deleted", "INFO")
 	end
 
@@ -462,7 +402,7 @@ function M.delete_current()
 		return
 	end
 
-	M.state.pending_confirm = true
+	M.state.busy = true
 	local opened = confirm.open({
 		title = "Delete Test Case",
 		message = string.format("Delete TC %d? Unsaved changes will be lost.", idx - 1),
@@ -472,17 +412,18 @@ function M.delete_current()
 		},
 		default = "cancel",
 		on_choice = function(action)
-			M.state.pending_confirm = false
+			M.state.busy = false
 			if action == "delete" then
 				do_delete()
 			else
-				set_tc_cursor(M.state.current_index)
+				focus_tc_row()
 			end
 		end,
 	})
 	if not opened then
-		M.state.pending_confirm = false
+		M.state.busy = false
 		notify.show("Resolve the pending dialog first", "WARN")
+		focus_tc_row()
 	end
 end
 
@@ -496,16 +437,8 @@ function M.close(cb)
 			end
 			return
 		end
-		if M.state.pending_confirm then
-			notify.show("Resolve the pending dialog first", "WARN")
-			if cb then
-				cb(false)
-			end
-			return
-		end
 
 		local function do_close()
-			M.state.gen = M.state.gen + 1
 			ui.close_style(GROUP, get_style())
 			M.reset_state()
 			if cb then
@@ -513,7 +446,7 @@ function M.close(cb)
 			end
 		end
 
-		resolve_unsaved(
+		local started = with_unsaved(
 			string.format("TC %d has unsaved changes. Save before closing?", M.state.current_index - 1),
 			do_close,
 			function()
@@ -522,25 +455,13 @@ function M.close(cb)
 				end
 			end
 		)
+		if not started then
+			notify.show("Resolve the pending dialog first", "WARN")
+			if cb then
+				cb(false)
+			end
+		end
 	end)
-end
-
-local function on_cursor_moved()
-	local win = ui.get_win_by_key(GROUP, "tc", get_style())
-	if not win or vim.api.nvim_get_current_win() ~= win then
-		return
-	end
-	local cursor = vim.api.nvim_win_get_cursor(win)
-	local row = cursor[1]
-	if cursor[2] ~= 5 then
-		pcall(vim.api.nvim_win_set_cursor, win, { row, 5 })
-	end
-	if M.state.switching or M.state.pending_confirm then
-		return
-	end
-	if row ~= M.state.current_index then
-		M.request_switch(row)
-	end
 end
 
 ---Shared on_created callback for open / toggle / resize.
@@ -550,73 +471,36 @@ local function setup_ui()
 	if not inst or not inst.bufs then
 		return
 	end
-	local gen = M.state.gen
-	local tc_buf = inst.bufs.tc
 
-	for _, key in ipairs({ "si", "so" }) do
-		local buf = inst.bufs[key]
-		if buf and vim.api.nvim_buf_is_valid(buf) then
-			vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
-				buffer = buf,
-				callback = function()
-					if M.state.is_updating > 0 then
-						return
-					end
-					capture_current()
-				end,
-			})
-
-			-- Capture before the engine rebuilds buffers (resize/toggle).
-			vim.api.nvim_create_autocmd("BufWinLeave", {
-				buffer = buf,
-				callback = function()
-					capture_current()
-					vim.schedule(function()
-						if M.state.gen ~= gen then
-							return
-						end
-						if ui.get_instance(GROUP, style) ~= inst then
-							return
-						end
-						if M.is_open() then
-							M.close()
-						end
-					end)
-				end,
-			})
-		end
-	end
+	tc_view.attach({
+		group = GROUP,
+		style = style,
+		inst = inst,
+		row_range = function()
+			return 1, tc_count()
+		end,
+		on_before_leave = function()
+			capture_current(inst)
+		end,
+		on_row = function(row)
+			if M.state.busy then
+				return
+			end
+			if row ~= M.state.current_index then
+				M.request_switch(row)
+			end
+		end,
+		on_leave = function()
+			if M.is_open() then
+				M.close()
+			end
+		end,
+	})
 
 	update_tc_list()
 	render_current()
 	M.bind_keys()
-
-	if tc_buf and vim.api.nvim_buf_is_valid(tc_buf) then
-		vim.bo[tc_buf].modifiable = false
-		-- Manual close of the TC list window (float style).
-		vim.api.nvim_create_autocmd("BufWinLeave", {
-			buffer = tc_buf,
-			callback = function()
-				vim.schedule(function()
-					if M.state.gen ~= gen then
-						return
-					end
-					if ui.get_instance(GROUP, style) ~= inst then
-						return
-					end
-					if M.is_open() then
-						M.close()
-					end
-				end)
-			end,
-		})
-		vim.api.nvim_clear_autocmds({ buffer = tc_buf, event = "CursorMoved" })
-		vim.api.nvim_create_autocmd("CursorMoved", {
-			buffer = tc_buf,
-			callback = on_cursor_moved,
-		})
-	end
-	set_tc_cursor(M.state.current_index)
+	tc_view.focus_row(GROUP, style, M.state.current_index)
 end
 
 ---Bind keymaps.
@@ -625,90 +509,70 @@ function M.bind_keys()
 	if not inst then
 		return
 	end
+	local style = get_style()
 	local maps = M.config.tc_edit_ui.mappings
 
+	local function focus_tc()
+		local win = ui.get_win_by_key(GROUP, "tc", style)
+		if win then
+			vim.api.nvim_set_current_win(win)
+			tc_view.focus_row(GROUP, style, M.state.current_index)
+		end
+	end
+
+	local function focus_detail(key)
+		local win = ui.get_win_by_key(GROUP, key, style)
+		if win then
+			vim.api.nvim_set_current_win(win)
+		end
+	end
+
+	local function move(step)
+		local row = vim.api.nvim_win_get_cursor(0)[1]
+		local target = row + step
+		if target < 1 or target > tc_count() then
+			return
+		end
+		tc_view.focus_row(GROUP, style, target)
+		-- Drive the switch now: API cursor moves do not reliably fire CursorMoved.
+		M.request_switch(target)
+	end
+
+	local function jump(key, step)
+		local curr_idx = 1
+		for i, v in ipairs(EDIT_CYCLE) do
+			if v == key then
+				curr_idx = i
+				break
+			end
+		end
+		focus_detail(EDIT_CYCLE[(curr_idx + step - 1) % #EDIT_CYCLE + 1])
+	end
+
 	for key, buf in pairs(inst.bufs) do
-		local opts = { buffer = buf, nowait = true, silent = true }
-
-		-- Toggle style key on all buffers
-		if maps.toggle_style then
-			for _, k in ipairs(maps.toggle_style) do
-				vim.keymap.set("n", k, M.toggle_style, opts)
-			end
-		end
-
-		for _, k in ipairs(maps.write) do
-			vim.keymap.set("n", k, M.save, opts)
-		end
-
+		tc_view.bind(buf, maps.toggle_style, M.toggle_style)
+		tc_view.bind(buf, maps.write, M.save)
 		if key == "tc" then
-			for _, k in ipairs(maps.close) do
-				vim.keymap.set("n", k, M.close, opts)
-			end
-			for _, k in ipairs(maps.edit) do
-				vim.keymap.set("n", k, function()
-					local win = ui.get_win_by_key(GROUP, "si", get_style())
-					if win then
-						vim.api.nvim_set_current_win(win)
-					end
-				end, opts)
-			end
-			for _, k in ipairs(maps.focus_next) do
-				vim.keymap.set("n", k, function()
-					local r = vim.api.nvim_win_get_cursor(0)[1]
-					if r < M.state.test_count then
-						vim.api.nvim_win_set_cursor(0, { r + 1, 2 })
-					end
-				end, opts)
-			end
-			for _, k in ipairs(maps.focus_prev) do
-				vim.keymap.set("n", k, function()
-					local r = vim.api.nvim_win_get_cursor(0)[1]
-					if r > 1 then
-						vim.api.nvim_win_set_cursor(0, { r - 1, 2 })
-					end
-				end, opts)
-			end
-			for _, k in ipairs(maps.add) do
-				vim.keymap.set("n", k, M.add, opts)
-			end
-			for _, k in ipairs(maps.erase) do
-				vim.keymap.set("n", k, M.delete_current, opts)
-			end
+			tc_view.bind(buf, maps.close, M.close)
+			tc_view.bind(buf, maps.edit, function()
+				focus_detail("si")
+			end)
+			tc_view.bind(buf, maps.focus_next, function()
+				move(1)
+			end)
+			tc_view.bind(buf, maps.focus_prev, function()
+				move(-1)
+			end)
+			tc_view.bind(buf, maps.add, M.add)
+			tc_view.bind(buf, maps.erase, M.delete_current)
 		else
-			for _, k in ipairs(maps.close) do
-				vim.keymap.set("n", k, function()
-					local win = ui.get_win_by_key(GROUP, "tc", get_style())
-					if win then
-						vim.api.nvim_set_current_win(win)
-						vim.api.nvim_win_set_cursor(win, { M.state.current_index, 2 })
-					end
-				end, opts)
-			end
-			local function jump(step)
-				local curr_idx = 1
-				for i, v in ipairs(EDIT_CYCLE) do
-					if v == key then
-						curr_idx = i
-						break
-					end
-				end
-				local target = EDIT_CYCLE[(curr_idx + step - 1) % #EDIT_CYCLE + 1]
-				local win = ui.get_win_by_key(GROUP, target, get_style())
-				if win then
-					vim.api.nvim_set_current_win(win)
-				end
-			end
-			for _, k in ipairs(maps.edit_focus_next) do
-				vim.keymap.set("n", k, function()
-					jump(1)
-				end, opts)
-			end
-			for _, k in ipairs(maps.edit_focus_prev) do
-				vim.keymap.set("n", k, function()
-					jump(-1)
-				end, opts)
-			end
+			tc_view.bind(buf, maps.close, focus_tc)
+			tc_view.bind(buf, maps.edit_focus_next, function()
+				jump(key, 1)
+			end)
+			tc_view.bind(buf, maps.edit_focus_prev, function()
+				jump(key, -1)
+			end)
 		end
 	end
 end
@@ -725,12 +589,11 @@ function M.toggle_style(target)
 		M.current_style = new_style
 		return
 	end
-	if M.state.switching or M.state.pending_confirm then
+	if M.state.busy then
 		return
 	end
 
 	capture_current()
-	M.state.gen = M.state.gen + 1
 	ui.close_style(GROUP, old_style)
 	M.current_style = new_style
 	ui.open(GROUP, new_style, get_style_config(), TITLES, WIN_OPTS, setup_ui)
@@ -739,7 +602,7 @@ end
 ---@param style? '"float"'|'"split"'
 function M.edit(style)
 	vim.schedule(function()
-		if M.state.pending_confirm then
+		if M.state.busy then
 			notify.show("Resolve the pending dialog first", "WARN")
 			return
 		end
@@ -766,12 +629,9 @@ function M.edit(style)
 			return
 		end
 
-		M.state.gen = M.state.gen + 1
+		M.reset_state()
 		M.state.problem_dir = problem_dir
 		M.state.problem_name = vim.fn.fnamemodify(file_path, ":t:r")
-		M.state.current_index = 1
-		M.state.switching = false
-		M.state.pending_confirm = false
 
 		local function open_editor()
 			ui.open(GROUP, s, get_style_config(), TITLES, WIN_OPTS, setup_ui)
@@ -791,7 +651,6 @@ function M.edit(style)
 						M.reset_state()
 						return
 					end
-					M.state.disk_count = 0
 					begin_pending_case()
 					log("INFO", "edit", "New problem data will be created on save")
 					open_editor()
@@ -805,17 +664,12 @@ function M.edit(style)
 			return
 		end
 
-		local count = scan_disk_count(problem_dir)
-		M.state.disk_count = count
-		if count == 0 then
-			M.state.disk_count = 0
+		M.state.disk_count = scan_disk_count(problem_dir)
+		if M.state.disk_count == 0 then
 			begin_pending_case()
 		else
-			M.state.test_count = count
-			M.state.pending_new = false
 			load_case(1)
 		end
-
 		open_editor()
 	end)
 end
