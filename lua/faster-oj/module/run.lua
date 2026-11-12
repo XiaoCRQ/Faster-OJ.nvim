@@ -297,16 +297,19 @@ function M.compile(file_path, need_compile, on_compile_finish)
 		exec,
 		{ args = args, cwd = vars.DIR, stdio = { nil, nil, stderr }, hide = true },
 		function(code)
-			safe_close(stderr)
-			safe_close(handle)
+			-- libuv callbacks run in a fast event context; defer to the main loop.
+			vim.schedule(function()
+				safe_close(stderr)
+				safe_close(handle)
 
-			last_compile_msg = table.concat(err_chunks):match("^%s*(.-)%s*$")
-			if code ~= 0 then
-				log("ERROR", "compile", string.format("FAILED (code=%d): %s", code, last_compile_msg or ""))
-			else
-				log("INFO", "compile", "OK")
-			end
-			on_compile_finish(code == 0, last_compile_msg or (code ~= 0 and "Compilation failed" or ""), true)
+				last_compile_msg = table.concat(err_chunks):match("^%s*(.-)%s*$")
+				if code ~= 0 then
+					log("ERROR", "compile", string.format("FAILED (code=%d): %s", code, last_compile_msg or ""))
+				else
+					log("INFO", "compile", "OK")
+				end
+				on_compile_finish(code == 0, last_compile_msg or (code ~= 0 and "Compilation failed" or ""), true)
+			end)
 		end
 	)
 

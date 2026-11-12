@@ -35,7 +35,8 @@ lua/faster-oj/
     └── ui/
         ├── init.lua        # Layout engine — recursive weight-based rect calculation
         ├── tests.lua       # Judge result viewer (TC list + detail panels)
-        ├── tests_edit.lua  # TC editor with file-based real-time sync
+        ├── tests_edit.lua  # TC editor: one open TC, in-memory edits, explicit save
+        ├── confirm.lua     # Floating choice dialog (Yes/No/Cancel; Yes/No for delete)
         └── stress.lua      # Stress test result viewer
 ```
 
@@ -51,13 +52,16 @@ Neovim API functions (`vim.fn.mkdir`, `nvim_buf_get_name`, etc.) MUST NOT be cal
 `vim.tbl_deep_extend("force", defaults, user_opts)` — user overrides take priority. `compile_command` / `run_command` keys are **file extensions** (e.g., `py`, `js`, `rs`, `kt`, `pas`), not language names. Config field `data_dir` (was `json_dir`).
 
 ### UI: custom layout engine
-Config defines a recursive `{weight, content}` tree. `calculate_rects()` computes absolute coords; `ui.open()` creates/moves floating windows with rounded borders. On `VimResized`, windows reposition without teardown. All UI modules use `vim.schedule()` for rendering.
+Config defines a recursive `{weight, content}` tree. `calculate_rects()` computes absolute coords; `ui.open()` creates/moves floating windows with rounded borders. On `VimResized`, the engine closes and reopens instances; viewers restore their state in the on-created callback. All UI modules use `vim.schedule()` for rendering.
 
 ### Logging: unified format
 All modules use: `log(level, func, msg)` → `[FOJ][<module>][LEVEL] func: msg`. Levels: INFO, WARN, ERROR. Only outputs when `config.debug == true`. All runtime strings are English.
 
 ### Notifications: single-window
 `notify.lua` provides `notify.show(msg, level, duration)`, `notify.spinner_start/update/done/fail(msg)`. A single floating window at top-center that replaces previous content. Spinner uses Unicode braille chars `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` at 80ms interval.
+
+### Confirmations: floating choice dialog
+All confirmation prompts use `module/ui/confirm.lua` (`confirm.open`) instead of `vim.fn.confirm`. The dialog is asynchronous (callback-based), single-instance, and locks the cursor on the first option's key letter. Default choices are Yes/No/Cancel; destructive prompts use Yes/No with No as the default. When a dialog cannot be opened (no UI), callers must choose the safe default (abort the destructive action).
 
 ### Concurrent judging
 `run.lua:fill_queue()` maintains active workers up to `max_workers` (default 5). As each finishes, fill_queue recursively starts the next.
@@ -84,6 +88,8 @@ data_dir/
     └── ...
 ```
 Read via `utils.read_test_case(dir, index)`, test count from `utils.get_test_count(dir)`.
+
+Problem names received from the browser are sanitized: characters invalid on Linux/macOS/Windows (`/ \ : * ? " < > |` and control characters) are replaced with `_`; runs of `_` are collapsed; leading/trailing whitespace and trailing dots/spaces are trimmed; empty results fall back to `problem`; Windows reserved device names (`CON`, `PRN`, `AUX`, `NUL`, `COM1`-`COM9`, `LPT1`-`LPT9`) are prefixed with `_`. The same sanitized name is used for the data folder and the source file name, while `problem.json.name` keeps the original title. If a different original title sanitizes to an existing folder, the handler asks before overwriting that problem's data.
 
 ### Solve history format
 `.history` file, one line per solve. Tab-separated path pairs `from\tto` — each pair is a `uv.fs_rename` move. `solve_back()` reverses pairs in order. Max entries controlled by `max_solve_history` (default 100).
@@ -113,13 +119,14 @@ Read via `utils.read_test_case(dir, index)`, test count from `utils.get_test_cou
 
 | Field | Default | Notes |
 |-------|---------|-------|
-| `data_dir` | `".problem"` | Problem data directory |
-| `temp_dir` | `".temp"` | Temp files (stress data, submit) |
-| `solve_dir` | `".solve"` | Solved problem archive |
+| `data_dir` | `stdpath("data").."/faster-oj/.problem"` | Problem data directory |
+| `temp_dir` | `stdpath("data").."/faster-oj/.temp"` | Temp files (stress data, submit) |
+| `solve_dir` | `stdpath("data").."/faster-oj/.solve"` | Solved problem archive |
 | `default_time_limit` | `2000` | Fallback time limit (ms) |
 | `default_memory_limit` | `256` | Fallback memory limit (MB) |
 | `max_solve_history` | `100` | Max .history entries |
 | `clipboard_submit` | `false` | Copy code to `+` register on submit |
+| `tc_edit_ui.confirm_unsaved` | `true` | Confirm unsaved TC switch/close/new and TC deletion |
 | `compile_command` | table | Keyed by file extension |
 | `run_command` | table | Keyed by file extension |
 

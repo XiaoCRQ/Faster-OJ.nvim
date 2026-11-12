@@ -26,7 +26,7 @@
 ---@field default_time_limit integer 缺省时间限制 (ms)
 ---@field default_memory_limit integer 缺省内存限制 (MB)
 ---@field tc_ui FOJ.UIConfig UI 布局配置
----@field tc_edit_ui FOJ.UIConfig UI 布局配置
+---@field tc_edit_ui FOJ.EditUIConfig 测试用例编辑 UI 配置
 ---@field stress_ui FOJ.UIConfig 对拍 UI 布局配置
 ---@field highlights FOJ.HighlightConfig 高亮颜色配置
 ---@field compile_command table<string, FOJ.Command> 编译命令表
@@ -43,6 +43,9 @@
 ---@field mappings table 快捷键（两种风格共用）
 ---@field float FOJ.UIStyleConfig 浮动风格配置
 ---@field split FOJ.UIStyleConfig 分屏风格配置
+
+---@class FOJ.EditUIConfig : FOJ.UIConfig
+---@field confirm_unsaved boolean 切换/关闭/新建 TC 或删除 TC 时是否弹窗确认
 
 ---@class FOJ.HighlightConfig
 ---@class FOJ.HighlightConfig.windows
@@ -152,6 +155,7 @@ M.config = {
 
 	tc_edit_ui = {
 		default_style = "float",
+		confirm_unsaved = true,
 		mappings = {
 			close = { "<esc>", "<C-c>", "q", "Q" },
 			erase = { "d" },

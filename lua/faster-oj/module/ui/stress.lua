@@ -180,10 +180,7 @@ function M.update(size, results)
 end
 
 ---Toggle between float and split styles
-function M.toggle_style()
-	local old_style = get_style()
-	local new_style = (old_style == "float") and "split" or "float"
-
+local function do_toggle_style(old_style, new_style)
 	-- Save state
 	local saved_size = M.state.size
 	local saved_results = {}
@@ -237,6 +234,21 @@ function M.toggle_style()
 		M.state.current_idx = 1
 		M.update(saved_size, saved_results)
 	end)
+end
+
+function M.toggle_style()
+	local old_style = get_style()
+	local new_style = (old_style == "float") and "split" or "float"
+	local edit = require("faster-oj.module.ui.tests_edit")
+	if edit.is_open() and edit.current_style == new_style then
+		edit.close(function(ok)
+			if ok then
+				do_toggle_style(old_style, new_style)
+			end
+		end)
+		return
+	end
+	do_toggle_style(old_style, new_style)
 end
 
 function M.bind_keys()
@@ -336,12 +348,13 @@ function M.show(style)
 			return
 		end
 
-		-- Close other style of same viewer, engine handles cross-viewer same-style interlock
-		local other = (s == "float") and "split" or "float"
-		ui.close_style(GROUP, other)
+		local function open()
+			-- Close other style of same viewer, engine handles cross-viewer same-style interlock
+			local other = (s == "float") and "split" or "float"
+			ui.close_style(GROUP, other)
 
-		local cfg = get_style_config()
-		ui.open(GROUP, s, cfg, TITLES, WIN_OPTS, function()
+			local cfg = get_style_config()
+			ui.open(GROUP, s, cfg, TITLES, WIN_OPTS, function()
 			local inst = ui.get_instance(GROUP, s)
 			local tc_buf = inst.bufs.tc
 
@@ -374,7 +387,19 @@ function M.show(style)
 				end,
 			})
 			M.update(M.state.size, M.state.results)
-		end)
+			end)
+		end
+
+		local edit = require("faster-oj.module.ui.tests_edit")
+		if edit.is_open() and edit.current_style == s then
+			edit.close(function(ok)
+				if ok then
+					open()
+				end
+			end)
+		else
+			open()
+		end
 	end)
 end
 

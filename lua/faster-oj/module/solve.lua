@@ -2,6 +2,7 @@
 
 local utils = require("faster-oj.module.utils")
 local notify = require("faster-oj.module.notify")
+local confirm = require("faster-oj.module.ui.confirm")
 
 ---@class FOJ.SolveModule
 ---@field config FOJ.Config
@@ -90,6 +91,88 @@ function M.solve()
 		target_path = solve_dir .. "/" .. filename
 	end
 
+	local function move_and_record()
+		local history_parts = {}
+
+		if has_data then
+			-- Step 1: source file → data folder
+			local src_in_data = problem_dir .. filename
+			local ok, err = uv.fs_rename(abs_original, src_in_data)
+			if not ok then
+				log("ERROR", "solve", "Move source into data dir failed: " .. (err or ""))
+				return
+			end
+			table.insert(history_parts, abs_original)
+			table.insert(history_parts, src_in_data)
+
+			-- Step 2: data folder → solve_dir
+			local pok, perr = uv.fs_rename(problem_dir, target_path)
+			if not pok then
+				-- rollback step 1
+				uv.fs_rename(src_in_data, abs_original)
+				log("ERROR", "solve", "Move data dir failed: " .. (perr or ""))
+				return
+			end
+			table.insert(history_parts, problem_dir)
+			table.insert(history_parts, target_path)
+
+			vim.cmd("bd!")
+		else
+			-- Single step: source file → solve_dir
+			local ok, err = uv.fs_rename(abs_original, target_path)
+			if not ok then
+				log("ERROR", "solve", "Move source failed: " .. (err or ""))
+				return
+			end
+			table.insert(history_parts, abs_original)
+			table.insert(history_parts, target_path)
+
+			vim.cmd("bd!")
+		end
+
+		local history_line = table.concat(history_parts, "\t")
+		local history_path = solve_dir .. "/.history"
+		local lines = read_lines(history_path)
+		table.insert(lines, history_line)
+		write_lines(history_path, lines)
+		trim_history(history_path)
+
+		log("INFO", "solve", "Solved: " .. filename)
+		notify.show("Solved: " .. filename, "DONE")
+	end
+
+	local function remove_old_and_move()
+		-- Remove old data from disk
+		if vim.fn.isdirectory(target_path) == 1 then
+			vim.fn.delete(target_path, "rf")
+		else
+			os.remove(target_path)
+		end
+
+		-- Remove old entry from history
+		local history_path = solve_dir .. "/.history"
+		local lines = read_lines(history_path)
+		local new_lines = {}
+		for _, line in ipairs(lines) do
+			local parts = vim.split(line, "\t", { plain = true })
+			local match = false
+			for _, part in ipairs(parts) do
+				if part == target_path then
+					match = true
+					break
+				end
+			end
+			if not match then
+				table.insert(new_lines, line)
+			else
+				log("INFO", "solve", "Removed old history entry for: " .. problem_name)
+			end
+		end
+		write_lines(history_path, new_lines)
+
+		move_and_record()
+	end
+
 	-- Duplicate detection: check if target already exists
 	local target_exists = (vim.fn.isdirectory(target_path) == 1)
 		or (vim.fn.filereadable(target_path) == 1)
@@ -133,95 +216,34 @@ function M.solve()
 			return
 		end
 
-		local should_overwrite = true
 		if M.config.confirm_on_duplicate then
-			local choice = vim.fn.confirm(
-				"Problem '" .. problem_name .. "' already exists in solve directory. Overwrite?",
-				"&Yes\n&No", 2)
-			should_overwrite = (choice == 1)
-		end
-
-		if not should_overwrite then
-			log("INFO", "solve", "User declined overwrite for: " .. problem_name)
+			local opened = confirm.open({
+				title = "Duplicate Problem",
+				message = "Problem '" .. problem_name .. "' already exists in solve directory. Overwrite?",
+				choices = {
+					{ key = "y", label = "[Y] Yes", value = "yes" },
+					{ key = "n", label = "[N] No", value = "no" },
+				},
+				default = "no",
+				on_choice = function(action)
+					if action == "yes" then
+						remove_old_and_move()
+					else
+						log("INFO", "solve", "User declined overwrite for: " .. problem_name)
+					end
+				end,
+			})
+			if not opened then
+				log("WARN", "solve", "Confirmation unavailable; skipping overwrite")
+			end
 			return
 		end
 
-		-- Remove old data from disk
-		if vim.fn.isdirectory(target_path) == 1 then
-			vim.fn.delete(target_path, "rf")
-		else
-			os.remove(target_path)
-		end
-
-		-- Remove old entry from history
-		local history_path = solve_dir .. "/.history"
-		local lines = read_lines(history_path)
-		local new_lines = {}
-		for _, line in ipairs(lines) do
-			local parts = vim.split(line, "\t", { plain = true })
-			local match = false
-			for _, part in ipairs(parts) do
-				if part == target_path then
-					match = true
-					break
-				end
-			end
-			if not match then
-				table.insert(new_lines, line)
-			else
-				log("INFO", "solve", "Removed old history entry for: " .. problem_name)
-			end
-		end
-		write_lines(history_path, new_lines)
+		remove_old_and_move()
+		return
 	end
 
-	local history_parts = {}
-
-	if has_data then
-		-- Step 1: source file → data folder
-		local src_in_data = problem_dir .. filename
-		local ok, err = uv.fs_rename(abs_original, src_in_data)
-		if not ok then
-			log("ERROR", "solve", "Move source into data dir failed: " .. (err or ""))
-			return
-		end
-		table.insert(history_parts, abs_original)
-		table.insert(history_parts, src_in_data)
-
-		-- Step 2: data folder → solve_dir
-		local pok, perr = uv.fs_rename(problem_dir, target_path)
-		if not pok then
-			-- rollback step 1
-			uv.fs_rename(src_in_data, abs_original)
-			log("ERROR", "solve", "Move data dir failed: " .. (perr or ""))
-			return
-		end
-		table.insert(history_parts, problem_dir)
-		table.insert(history_parts, target_path)
-
-		vim.cmd("bd!")
-	else
-		-- Single step: source file → solve_dir
-		local ok, err = uv.fs_rename(abs_original, target_path)
-		if not ok then
-			log("ERROR", "solve", "Move source failed: " .. (err or ""))
-			return
-		end
-		table.insert(history_parts, abs_original)
-		table.insert(history_parts, target_path)
-
-		vim.cmd("bd!")
-	end
-
-	local history_line = table.concat(history_parts, "\t")
-	local history_path = solve_dir .. "/.history"
-	local lines = read_lines(history_path)
-	table.insert(lines, history_line)
-	write_lines(history_path, lines)
-	trim_history(history_path)
-
-	log("INFO", "solve", "Solved: " .. filename)
-	notify.show("Solved: " .. filename, "DONE")
+	move_and_record()
 end
 
 ---撤销上一次 solve 操作

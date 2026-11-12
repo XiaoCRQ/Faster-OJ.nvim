@@ -9,6 +9,7 @@ local submit = require("faster-oj.module.submit")
 local stress_mod = require("faster-oj.module.stress")
 local stress_ui = require("faster-oj.module.ui.stress")
 local notify = require("faster-oj.module.notify")
+local confirm = require("faster-oj.module.ui.confirm")
 
 ---@class FOJ.moduleModule
 ---@field config FOJ.Config
@@ -43,8 +44,33 @@ function M.submit(send)
 	submit.submit(send)
 end
 
-function M.run(need_compile)
-	-- Close all edit styles
+---Effective style of a viewer module.
+---@param viewer table
+---@param cfg_key string
+---@return string
+local function resolved_style(viewer, cfg_key)
+	return viewer.current_style
+		or (M.config[cfg_key] and M.config[cfg_key].default_style)
+		or "float"
+end
+
+---Run `fn` after closing EditUI when it occupies `target_style`.
+---@param target_style string
+---@param fn fun()
+local function with_edit_closed(target_style, fn)
+	if edit.is_open() and edit.current_style == target_style then
+		edit.close(function(ok)
+			if ok then
+				fn()
+			end
+		end)
+	else
+		fn()
+	end
+end
+
+local function run_now(need_compile)
+	-- Defensive: drop any leftover EditUI instance
 	ui_engine.close("EditUI")
 
 	local file_path = utils.get_file_path()
@@ -95,7 +121,9 @@ function M.run(need_compile)
 		end
 
 		if not ui.is_open() then
-			ui.show()
+			with_edit_closed(resolved_style(ui, "tc_ui"), function()
+				ui.show()
+			end)
 		end
 
 		log("INFO", "run", "Running " .. test_count .. " test(s)")
@@ -126,6 +154,18 @@ function M.run(need_compile)
 			end
 		end)
 	end)
+end
+
+function M.run(need_compile)
+	if edit.is_open() then
+		edit.close(function(ok)
+			if ok then
+				run_now(need_compile)
+			end
+		end)
+	else
+		run_now(need_compile)
+	end
 end
 
 -- ── Unified show ─────────────────────────────────────────
@@ -171,38 +211,41 @@ function M.show(ctrl)
 	end
 
 	if viewer == "edit" then
-		if style then
-			edit.current_style = style
-		end
 		if edit.is_open() then
-			edit.close()
+			if style and style ~= edit.current_style then
+				-- Display-only style switch; unsaved edits stay in memory.
+				edit.toggle_style(style)
+			else
+				edit.close()
+			end
 		else
+			if style then
+				edit.current_style = style
+			end
 			edit.edit()
 			M.last_session = "edit"
 		end
 	elseif viewer == "stress" then
-		if style then
-			stress_ui.current_style = style
-		end
-		if stress_ui.is_open() then
+		local target = style or resolved_style(stress_ui, "stress_ui")
+		if stress_ui.is_open() and target == stress_ui.current_style then
 			stress_ui.close()
-		else
-			if stress_ui.state and stress_ui.state.size and stress_ui.state.size > 0 then
+		elseif stress_ui.state and stress_ui.state.size and stress_ui.state.size > 0 then
+			with_edit_closed(target, function()
+				stress_ui.current_style = target
 				stress_ui.show()
 				M.last_session = "stress"
-			end
+			end)
 		end
 	elseif viewer == "tests" then
-		if style then
-			ui.current_style = style
-		end
-		if ui.is_open() then
+		local target = style or resolved_style(ui, "tc_ui")
+		if ui.is_open() and target == ui.current_style then
 			ui.close()
-		else
-			ui.show()
-			if ui.is_open() then
+		elseif ui.state.size and ui.state.size > 0 then
+			with_edit_closed(target, function()
+				ui.current_style = target
+				ui.show()
 				M.last_session = "tests"
-			end
+			end)
 		end
 	else
 		-- nil / "" : close all if any open, else reopen last session
@@ -235,15 +278,34 @@ end
 ---@param ctrl string|nil
 function M.close(ctrl)
 	if not ctrl or ctrl == "" then
-		ui_engine.close("TestUI")
-		ui_engine.close("EditUI")
-		ui_engine.close("StressUI")
+		if edit.is_open() then
+			edit.close(function(ok)
+				if not ok then
+					return
+				end
+				ui_engine.close("TestUI")
+				ui_engine.close("EditUI")
+				ui_engine.close("StressUI")
+			end)
+		else
+			ui_engine.close("TestUI")
+			ui_engine.close("EditUI")
+			ui_engine.close("StressUI")
+		end
 	else
 		local sub = ctrl:lower()
 		if sub == "test" then
 			ui_engine.close("TestUI")
 		elseif sub == "edit" then
-			ui_engine.close("EditUI")
+			if edit.is_open() then
+				edit.close(function(ok)
+					if ok then
+						ui_engine.close("EditUI")
+					end
+				end)
+			else
+				ui_engine.close("EditUI")
+			end
 		elseif sub == "stress" then
 			ui_engine.close("StressUI")
 		end
@@ -252,8 +314,12 @@ end
 
 ---@param opts? table
 function M.stress(opts)
-	stress_mod.stress(opts)
-	M.last_session = "stress"
+	local function do_stress()
+		stress_mod.stress(opts)
+		M.last_session = "stress"
+	end
+
+	with_edit_closed(resolved_style(stress_ui, "stress_ui"), do_stress)
 end
 
 function M.erase()
@@ -263,11 +329,27 @@ function M.erase()
 	if file_path == "" or file_name == "" then
 		return
 	end
-	if vim.fn.confirm("Delete " .. file_name .. "?", "&Yes\n&No", 2) == 1 then
-		vim.cmd("bd!")
-		utils.erase(file_path)
-		utils.delete_problem_dir(problem_dir)
-		notify.show("Deleted: " .. file_name, "INFO")
+
+	local opened = confirm.open({
+		title = "Delete Problem",
+		message = "Delete " .. file_name .. "?",
+		choices = {
+			{ key = "y", label = "[Y] Yes", value = "yes" },
+			{ key = "n", label = "[N] No", value = "no" },
+		},
+		default = "no",
+		on_choice = function(action)
+			if action ~= "yes" then
+				return
+			end
+			vim.cmd("bd!")
+			utils.erase(file_path)
+			utils.delete_problem_dir(problem_dir)
+			notify.show("Deleted: " .. file_name, "INFO")
+		end,
+	})
+	if not opened then
+		log("WARN", "erase", "Confirmation unavailable")
 	end
 end
 

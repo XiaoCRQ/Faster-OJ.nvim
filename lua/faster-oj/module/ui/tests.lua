@@ -143,10 +143,7 @@ function M.update(size, testcases)
 end
 
 ---Toggle between float and split styles
-function M.toggle_style()
-	local old_style = get_style()
-	local new_style = (old_style == "float") and "split" or "float"
-
+local function do_toggle_style(old_style, new_style)
 	-- Save state
 	local saved_size = M.state.size
 	local saved_cases = {}
@@ -209,6 +206,21 @@ function M.toggle_style()
 		M.state.current_idx = 1
 		M.update(saved_size, saved_cases)
 	end)
+end
+
+function M.toggle_style()
+	local old_style = get_style()
+	local new_style = (old_style == "float") and "split" or "float"
+	local edit = require("faster-oj.module.ui.tests_edit")
+	if edit.is_open() and edit.current_style == new_style then
+		edit.close(function(ok)
+			if ok then
+				do_toggle_style(old_style, new_style)
+			end
+		end)
+		return
+	end
+	do_toggle_style(old_style, new_style)
 end
 
 function M.bind_keys()
