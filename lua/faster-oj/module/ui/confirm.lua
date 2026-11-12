@@ -7,7 +7,7 @@ local M = {}
 
 local ns = vim.api.nvim_create_namespace("FOJConfirm")
 
----Normal-mode keys that would move the cursor; they are disabled in the dialog.
+---Keys disabled in the dialog: cursor movement, modes, and command-line entry.
 local LOCKED_KEYS = {
 	"h", "j", "k", "l",
 	"<Left>", "<Right>", "<Up>", "<Down>",
@@ -17,7 +17,10 @@ local LOCKED_KEYS = {
 	"<PageUp>", "<PageDown>", "<C-b>", "<C-f>", "<C-u>", "<C-d>",
 	"|", "%", "{", "}", "(", ")",
 	"H", "M", "L", "+", "-", "_",
-	"<Space>", "<BS>", "<Del>",
+	"<Space>", "<BS>", "<Del>", "<C-o>", "<C-i>",
+	":", "<C-w>",
+	"i", "I", "a", "A", "o", "O", "R",
+	"v", "V", "<C-v>",
 }
 
 local state = {

@@ -5,6 +5,8 @@ local ws_server = require("faster-oj.server.websocket.server")
 local module = require("faster-oj.module.init")
 local solve = require("faster-oj.module.solve")
 local default_config = require("faster-oj.default")
+local confirm = require("faster-oj.module.ui.confirm")
+local notify = require("faster-oj.module.notify")
 
 ---@class FOJ
 ---@field config FOJ.Config
@@ -199,6 +201,11 @@ function M.setup(opts)
 	}
 
 	vim.api.nvim_create_user_command("FOJ", function(params)
+		if confirm.is_open() then
+			notify.show("Resolve the pending dialog first", "WARN")
+			return
+		end
+
 		local raw = params.args or ""
 		log("INFO", "FOJ", "raw args: [" .. raw .. "]")
 

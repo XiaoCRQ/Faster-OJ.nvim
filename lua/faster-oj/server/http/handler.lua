@@ -173,6 +173,7 @@ function M.handle(json, cfg)
 			})
 			if not opened then
 				log("WARN", "handle", "Confirmation unavailable; opening existing file")
+				notify.show("Resolve the pending dialog first", "WARN")
 				open_target()
 			end
 			return
@@ -252,6 +253,7 @@ function M.handle(json, cfg)
 		})
 		if not opened then
 			log("WARN", "handle", "Confirmation unavailable; skipping data overwrite")
+			notify.show("Resolve the pending dialog first", "WARN")
 		end
 		return
 	end

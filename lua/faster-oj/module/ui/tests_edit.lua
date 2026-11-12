@@ -361,6 +361,7 @@ local function resolve_unsaved(message, on_proceed, on_cancel)
 	})
 	if not opened then
 		M.state.pending_confirm = false
+		notify.show("Resolve the pending dialog first", "WARN")
 		on_cancel()
 	end
 end
@@ -481,6 +482,7 @@ function M.delete_current()
 	})
 	if not opened then
 		M.state.pending_confirm = false
+		notify.show("Resolve the pending dialog first", "WARN")
 	end
 end
 
@@ -797,6 +799,7 @@ function M.edit(style)
 			})
 			if not opened then
 				log("WARN", "edit", "Confirmation unavailable")
+				notify.show("Resolve the pending dialog first", "WARN")
 				M.reset_state()
 			end
 			return

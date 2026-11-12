@@ -65,6 +65,7 @@ function M.solve()
 		log("WARN", "solve", "No file to solve")
 		return
 	end
+	local source_buf = vim.api.nvim_get_current_buf()
 	if not M.config or not M.config.solve_dir then
 		log("ERROR", "solve", "solve_dir not configured")
 		return
@@ -116,7 +117,9 @@ function M.solve()
 			table.insert(history_parts, problem_dir)
 			table.insert(history_parts, target_path)
 
-			vim.cmd("bd!")
+			if vim.api.nvim_buf_is_valid(source_buf) then
+				vim.api.nvim_buf_delete(source_buf, { force = true })
+			end
 		else
 			-- Single step: source file → solve_dir
 			local ok, err = uv.fs_rename(abs_original, target_path)
@@ -127,7 +130,9 @@ function M.solve()
 			table.insert(history_parts, abs_original)
 			table.insert(history_parts, target_path)
 
-			vim.cmd("bd!")
+			if vim.api.nvim_buf_is_valid(source_buf) then
+				vim.api.nvim_buf_delete(source_buf, { force = true })
+			end
 		end
 
 		local history_line = table.concat(history_parts, "\t")
@@ -235,6 +240,7 @@ function M.solve()
 			})
 			if not opened then
 				log("WARN", "solve", "Confirmation unavailable; skipping overwrite")
+				notify.show("Resolve the pending dialog first", "WARN")
 			end
 			return
 		end

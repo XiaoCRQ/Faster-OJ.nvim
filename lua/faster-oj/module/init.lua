@@ -74,16 +74,22 @@ local function run_now(need_compile)
 	ui_engine.close("EditUI")
 
 	local file_path = utils.get_file_path()
+	if file_path == "" then
+		log("WARN", "run", "No active source file")
+		notify.show("No active source file", "WARN")
+		return
+	end
+
 	local json = utils.get_json_file()
 	local tests = {}
-
-	vim.cmd("write")
 
 	if json == nil then
 		log("WARN", "run", "No problem data found")
 		notify.show("No problem data found", "WARN")
 		return
 	end
+
+	vim.cmd("write")
 
 	local test_count = json.testCount or 0
 	local problem_dir = utils.get_problem_dir_from(file_path)
@@ -235,6 +241,8 @@ function M.show(ctrl)
 				stress_ui.show()
 				M.last_session = "stress"
 			end)
+		else
+			stress_ui.current_style = target
 		end
 	elseif viewer == "tests" then
 		local target = style or resolved_style(ui, "tc_ui")
@@ -246,6 +254,8 @@ function M.show(ctrl)
 				ui.show()
 				M.last_session = "tests"
 			end)
+		else
+			ui.current_style = target
 		end
 	else
 		-- nil / "" : close all if any open, else reopen last session
@@ -330,6 +340,7 @@ function M.erase()
 		return
 	end
 
+	local bufnr = vim.api.nvim_get_current_buf()
 	local opened = confirm.open({
 		title = "Delete Problem",
 		message = "Delete " .. file_name .. "?",
@@ -342,7 +353,9 @@ function M.erase()
 			if action ~= "yes" then
 				return
 			end
-			vim.cmd("bd!")
+			if vim.api.nvim_buf_is_valid(bufnr) then
+				vim.api.nvim_buf_delete(bufnr, { force = true })
+			end
 			utils.erase(file_path)
 			utils.delete_problem_dir(problem_dir)
 			notify.show("Deleted: " .. file_name, "INFO")
@@ -350,6 +363,7 @@ function M.erase()
 	})
 	if not opened then
 		log("WARN", "erase", "Confirmation unavailable")
+		notify.show("Resolve the pending dialog first", "WARN")
 	end
 end
 
