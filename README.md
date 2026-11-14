@@ -32,7 +32,7 @@
 2. **Fetch a problem** — Click a problem link in your browser; the [Competitive Companion](https://github.com/jmerle/competitive-companion) extension sends it to Neovim. A source file and test data are created automatically in `work_dir`
 3. **Write your solution** — Edit the generated file
 4. **Judge locally** — `<leader>cdt` compiles and runs all test cases. Results open in a multi-panel UI with side-by-side diff
-5. **Stress test (optional)** — `<leader>cdP` picks two solutions interactively, or specify paths: `:FOJ stress correct=path:"brute.cpp" test=path:"solve.cpp"`
+5. **Stress test (optional)** — `<leader>cdP` picks two solutions interactively, or specify paths: `:FOJ stress correct=path:"brute.cpp" test=path:"solution.cpp"`
 6. **Submit** — `<leader>cdr` sends the solution via WebSocket through the browser extension
 
 ---
@@ -70,7 +70,7 @@ local code_path = vim.fn.expand("~/Work/Program/CodeForces")
     work_dir = code_path,
     temp_dir = code_path .. "/.temp",
     data_dir = code_path .. "/.problem",
-    solve_dir = code_path .. "/.solve",
+    archive_dir = code_path .. "/.archive",
     template_dir = code_path .. "/.template",
     template_default = code_path .. "/.template/template.cpp",
   },
@@ -101,9 +101,9 @@ map("n", "<leader>cde", ":FOJ show edit<CR>",    vim.tbl_extend("force", opts, {
 map("n", "<leader>cdC", ":FOJ close<CR>",         vim.tbl_extend("force", opts, { desc = "FOJ: Close all UI windows" }))
 
 -- Data management
-map("n", "<leader>cds", ":FOJ solve<CR>",        vim.tbl_extend("force", opts, { desc = "FOJ: Mark as solved" }))
-map("n", "<leader>cdS", ":FOJ solve back<CR>",   vim.tbl_extend("force", opts, { desc = "FOJ: Undo solved mark" }))
-map("n", "<leader>cdd", ":FOJ erase<CR>",        vim.tbl_extend("force", opts, { desc = "FOJ: Delete problem data" }))
+map("n", "<leader>cds", ":FOJ archive<CR>",      vim.tbl_extend("force", opts, { desc = "FOJ: Archive problem" }))
+map("n", "<leader>cdS", ":FOJ archive back<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Restore archived problem" }))
+map("n", "<leader>cdd", ":FOJ delete<CR>",       vim.tbl_extend("force", opts, { desc = "FOJ: Delete problem data" }))
 
 -- Finder
 map("n", "<leader>cdc", ":FOJ find template<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Find templates" }))
@@ -163,9 +163,9 @@ map("n", "<leader>cdP", ":FOJ stress correct=find: test=find:<CR>",
 
 | Command | Description |
 | --- | --- |
-| `:FOJ solve` | Move problem to `solve_dir`, record history. Detects duplicates and handles via `confirm_on_duplicate` |
-| `:FOJ solve back` | Undo last solve (one entry at a time, LIFO stack order) |
-| `:FOJ erase` | Delete problem source + data directory |
+| `:FOJ archive` | Move problem to `archive_dir`, record history. Detects duplicates and handles via `confirm_on_duplicate` |
+| `:FOJ archive back` | Undo last archive operation (one entry at a time, LIFO stack order) |
+| `:FOJ delete` | Delete problem source + data directory |
 
 ### Finder
 
@@ -202,13 +202,13 @@ Values support three quoting styles for paths containing spaces or special chara
 :FOJ stress correct=find: test=find:
 
 " Direct paths
-:FOJ stress correct=path:brute.py test=path:solve.cpp
+:FOJ stress correct=path:brute.py test=path:solution.cpp
 
 " Paths with spaces (quoted)
-:FOJ stress correct=path:"my brute.cpp" test=path:'solve.cpp'
+:FOJ stress correct=path:"my brute.cpp" test=path:'solution.cpp'
 
 " C++ raw string quoting
-:FOJ stress correct=path:R"(brute.cpp)" test=path:R"(solve.cpp)"
+:FOJ stress correct=path:R"(brute.cpp)" test=path:R"(solution.cpp)"
 
 " With raw data and time/memory limits
 :FOJ stress correct=path:a.cpp test=path:b.cpp data=data:5\n1 2 3 time=1000 mem=512
@@ -224,7 +224,7 @@ Values support three quoting styles for paths containing spaces or special chara
 | --- | --- | --- | --- |
 | `work_dir` | string | `vim.fn.stdpath("data") .. "/faster-oj"` | Base working directory |
 | `data_dir` | string | `".problem"` | Problem data directory (relative to `work_dir`) |
-| `solve_dir` | string | `".solve"` | Solved problems archive (relative to `work_dir`) |
+| `archive_dir` | string | `".archive"` | Archived problems directory (relative to `work_dir`) |
 | `temp_dir` | string | `".temp"` | Temporary files (relative to `work_dir`) |
 | `template_dir` | string | `""` | Template directory |
 | `template_default` | string | `""` | Default template file |
@@ -240,7 +240,7 @@ Values support three quoting styles for paths containing spaces or special chara
 | `ws_host` | string | `"127.0.0.1"` | WebSocket bind address |
 | `ws_port` | integer | `10044` | WebSocket port |
 | `server_mod` | string | `"all"` | Startup mode: `http` / `ws` / `all` |
-| `max_time_out` | integer | `5` | Browser connection timeout (s) |
+| `max_timeout` | integer | `5` | Browser connection timeout (s) |
 
 ### Judge
 
@@ -254,8 +254,8 @@ Values support three quoting styles for paths containing spaces or special chara
 | `default_memory_limit` | integer | `256` | Fallback memory limit (MB) |
 | `linux_mem_offset` | integer | `-2900` | Linux memory offset (KB) |
 | `macos_mem_offset` | integer | `-1500` | macOS memory offset (KB) |
-| `max_solve_history` | integer | `100` | Max solve history entries |
-| `confirm_on_duplicate` | boolean | `false` | Confirm before overwriting duplicate problem in `solve_dir` |
+| `max_archive_history` | integer | `100` | Max archive history entries |
+| `confirm_on_duplicate` | boolean | `false` | Confirm before overwriting duplicate problem in `archive_dir` |
 | `debug` | boolean | `false` | Debug logging |
 
 ### Variable Expansion

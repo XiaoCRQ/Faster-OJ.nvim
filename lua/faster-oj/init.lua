@@ -3,7 +3,7 @@
 local http_server = require("faster-oj.server.http.server")
 local ws_server = require("faster-oj.server.websocket.server")
 local module = require("faster-oj.module.init")
-local solve = require("faster-oj.module.solve")
+local archive = require("faster-oj.module.archive")
 local default_config = require("faster-oj.default")
 local confirm = require("faster-oj.module.ui.confirm")
 local notify = require("faster-oj.module.notify")
@@ -23,7 +23,7 @@ M.config = default_config.config
 ---@param msg string
 local function log(level, func, msg)
 	if M.config.debug then
-		print(string.format("[FOJ][%s] %s: %s", level, func, msg))
+		print(string.format("[FOJ][init][%s] %s: %s", level, func, msg))
 	end
 end
 
@@ -54,7 +54,7 @@ end
 function M.setup(opts)
 	M.config = vim.tbl_deep_extend("force", M.config, opts or {})
 
-	solve.setup(M.config)
+	archive.setup(M.config)
 	module.setup(M.config)
 	ws_server.setup(M.config)
 	http_server.setup(M.config)
@@ -137,17 +137,17 @@ function M.setup(opts)
 				send = ws_server.send,
 			})
 		end,
-		solve = function(sub)
+		archive = function(sub)
 			if not sub then
-				return solve.solve()
+				return archive.archive()
 			end
 			if sub == "back" then
-				return solve.solve_back()
+				return archive.restore()
 			end
-			log("WARN", "FOJ command", "Unknown solve subcommand: " .. sub)
+			log("WARN", "command", "Unknown archive subcommand: " .. sub)
 		end,
-		erase = function()
-			module.erase()
+		delete = function()
+			module.delete_problem()
 		end,
 		find = function(sub)
 			module.find(sub)
@@ -161,7 +161,9 @@ function M.setup(opts)
 			local i = 1
 			while i <= #sub do
 				i = sub:find("%S", i)
-				if not i then break end
+				if not i then
+					break
+				end
 
 				local ks, key, typ, after_colon = sub:match("^()(%w+)=([%w_]+):()", i)
 				if ks then
@@ -207,7 +209,7 @@ function M.setup(opts)
 		end
 
 		local raw = params.args or ""
-		log("INFO", "FOJ", "raw args: [" .. raw .. "]")
+		log("INFO", "command", "raw args: [" .. raw .. "]")
 
 		if raw == "" then
 			if M.config.work_dir then
@@ -223,7 +225,7 @@ function M.setup(opts)
 		if actions[cmd] then
 			actions[cmd](sub_cmd)
 		else
-			log("WARN", "FOJ command", "Unknown command: " .. cmd)
+			log("WARN", "command", "Unknown command: " .. cmd)
 		end
 	end, { nargs = "*" })
 end

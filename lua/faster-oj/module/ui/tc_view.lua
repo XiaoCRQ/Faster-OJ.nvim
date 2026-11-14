@@ -12,11 +12,11 @@ local M = {}
 M.CURSOR_COL = 5
 
 ---Resolve the active style for a viewer.
----@param current string|nil
+---@param style string|nil
 ---@param section table|nil
 ---@return string
-function M.get_style(current, section)
-	return current or (section and section.default_style) or "float"
+function M.get_style(style, section)
+	return style or (section and section.default_style) or "float"
 end
 
 ---Get the style-specific config table.

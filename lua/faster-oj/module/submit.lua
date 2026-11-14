@@ -6,9 +6,9 @@ local uv = vim.uv or vim.loop
 
 local M = {}
 
-function M.setup(cfg)
-	M.config = cfg
-	utils.setup(cfg)
+function M.setup(config)
+	M.config = config
+	utils.setup(config)
 end
 
 ---@param level string
@@ -39,7 +39,7 @@ local function finalize_submission(ws, submit_data)
 
 	log("INFO", "finalize_submission", "Submit JSON written: " .. temp_path)
 
-	ws.wait_for_connection(M.config.max_time_out, function()
+	ws.wait_for_connection(M.config.max_timeout, function()
 		ws.send("broadcast " .. temp_path)
 		notify.show("Submitted OK", "DONE")
 	end, function()
@@ -75,11 +75,11 @@ function M.submit(ws)
 
 	local ext = vim.fn.fnamemodify(file_path, ":e")
 	local language = utils.detect_language(ext)
-	local json_path = utils.get_json_path()
-	local origin = utils.read_json(json_path)
+	local problem_json_path = utils.get_problem_json_path()
+	local origin = utils.read_json(problem_json_path)
 
 	if not origin or not origin.url then
-		log("ERROR", "submit", "Missing url in problem json: " .. json_path)
+		log("ERROR", "submit", "Missing url in problem json: " .. problem_json_path)
 		notify.show("No problem URL found", "WARN")
 		return
 	end
@@ -90,13 +90,16 @@ function M.submit(ws)
 		code = "",
 	}
 
-	local cmd_cfg = M.config.code_obfuscator
+	local obfuscator_config = M.config.code_obfuscator
 	local vars = utils.get_vars(file_path)
 
-	local should_obscure = cmd_cfg and cmd_cfg.cmd and cmd_cfg.cmd.exec ~= "" and cmd_cfg.result ~= ""
+	local should_obscure = obfuscator_config
+		and obfuscator_config.cmd
+		and obfuscator_config.cmd.exec ~= ""
+		and obfuscator_config.result ~= ""
 
 	if should_obscure then
-		local exec = utils.expand(cmd_cfg.cmd.exec, vars)
+		local exec = utils.expand(obfuscator_config.cmd.exec, vars)
 
 		if vim.fn.executable(exec) ~= 1 then
 			log("WARN", "submit", "Obfuscator not found: " .. exec .. " - falling back")
@@ -104,9 +107,9 @@ function M.submit(ws)
 			return
 		end
 
-		local result_path = utils.expand(cmd_cfg.result, vars)
+		local result_path = utils.expand(obfuscator_config.result, vars)
 		local args = {}
-		for _, a in ipairs(cmd_cfg.cmd.args or {}) do
+		for _, a in ipairs(obfuscator_config.cmd.args or {}) do
 			table.insert(args, utils.expand(a, vars))
 		end
 

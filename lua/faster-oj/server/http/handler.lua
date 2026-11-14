@@ -2,6 +2,7 @@
 
 local notify = require("faster-oj.module.notify")
 local confirm = require("faster-oj.module.ui.confirm")
+local utils = require("faster-oj.module.utils")
 
 local M = {}
 
@@ -40,35 +41,6 @@ local function sanitize_problem_name(name)
 	return s
 end
 
----写入纯文本文件
----@param path string
----@param content string
-local function write_text_file(path, content)
-	local f = io.open(path, "w")
-	if not f then
-		return false
-	end
-	f:write(content)
-	f:close()
-	return true
-end
-
----@param path string
----@return table|nil
-local function read_json_file(path)
-	local f = io.open(path, "r")
-	if not f then
-		return nil
-	end
-	local content = f:read("*a")
-	f:close()
-	local ok, data = pcall(vim.fn.json_decode, content)
-	if ok and type(data) == "table" then
-		return data
-	end
-	return nil
-end
-
 ---处理来自浏览器插件的题目数据
 ---存储格式:
 ---   data_dir/
@@ -78,9 +50,9 @@ end
 ---       ├── 1.in / 1.out
 ---       └── ...
 ---@param json table 原始 JSON (含 name, url, tests, memoryLimit, timeLimit)
----@param cfg table 插件配置
-function M.handle(json, cfg)
-	M.config = cfg
+---@param config table 插件配置
+function M.handle(json, config)
+	M.config = config
 
 	if type(json) ~= "table" then
 		log("ERROR", "handle", "Invalid problem payload")
@@ -118,10 +90,9 @@ function M.handle(json, cfg)
 
 		if M.config.template_default and M.config.template_default ~= "" then
 			local template_file = M.config.template_default
-			local tf = io.open(template_file, "r")
-			if tf then
-				content = tf:read("*a")
-				tf:close()
+			local template_content = utils.read_file(template_file)
+			if template_content then
+				content = template_content
 				ext = template_file:match("^.+(%..+)$") or M.config.template_default_ext
 			else
 				log("WARN", "handle", "Template file not found: " .. template_file)
@@ -145,10 +116,7 @@ function M.handle(json, cfg)
 		end
 
 		local function write_source()
-			local tf_out = io.open(target_file, "w")
-			if tf_out then
-				tf_out:write(content)
-				tf_out:close()
+			if utils.write_file(target_file, content) then
 				log("INFO", "handle", "File written: " .. target_file)
 			else
 				log("ERROR", "handle", "Cannot open target file: " .. target_file)
@@ -200,7 +168,7 @@ function M.handle(json, cfg)
 			return
 		end
 
-		if not write_text_file(problem_dir .. "/problem.json", json_str) then
+		if not utils.write_file(problem_dir .. "/problem.json", json_str) then
 			log("ERROR", "handle", "Failed to write " .. problem_dir .. "/problem.json")
 			vim.schedule(function()
 				notify.show("Failed to save problem data", "ERROR", 3000)
@@ -213,10 +181,8 @@ function M.handle(json, cfg)
 		for i, tc in ipairs(tests) do
 			local idx = i - 1 -- 0-based file index
 			local input = type(tc) == "table" and type(tc.input) == "string" and tc.input or ""
-			local output = type(tc) == "table" and type(tc.output) == "string" and tc.output or ""
-			local ok_in = write_text_file(problem_dir .. "/" .. idx .. ".in", input)
-			local ok_out = write_text_file(problem_dir .. "/" .. idx .. ".out", output)
-			if not (ok_in and ok_out) then
+			local expected = type(tc) == "table" and type(tc.output) == "string" and tc.output or ""
+			if not utils.write_test_case(problem_dir .. "/", idx, input, expected) then
 				log("ERROR", "handle", string.format("Failed to write test case %d", idx))
 				vim.schedule(function()
 					notify.show("Failed to save problem data", "ERROR", 3000)
@@ -235,7 +201,7 @@ function M.handle(json, cfg)
 
 	-- Different titles can sanitize to the same folder; do not silently
 	-- overwrite another problem's data.
-	local existing = read_json_file(problem_dir .. "/problem.json")
+	local existing = utils.read_json(problem_dir .. "/problem.json")
 	if existing and type(existing.name) == "string" and existing.name ~= original_name then
 		local existing_display = existing.name:gsub("%c", " ")
 		local opened = confirm.open({

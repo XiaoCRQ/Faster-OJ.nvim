@@ -3,13 +3,13 @@
 ---@field http_port integer HTTP 服务器端口
 ---@field ws_host string WebSocket 服务器地址
 ---@field ws_port integer WebSocket 服务器端口
----@field max_time_out integer 浏览器连接最大时间
+---@field max_timeout integer 浏览器连接最大时间 (秒)
 ---@field debug boolean 是否开启调试模式
 ---@field server_mod '"http"'|'"ws"'|'"all"' 服务器启动模式
 ---@field temp_dir string 临时文件目录
 ---@field work_dir string 工作目录
 ---@field data_dir string 题目数据存储目录
----@field solve_dir string 已解决问题存储目录
+---@field archive_dir string 已归档题目存储目录
 ---@field template_dir string 模板数据存储目录
 ---@field template_default string 默认模板
 ---@field template_default_ext string 无默认模板时使用的默认语言
@@ -21,8 +21,8 @@
 ---@field warning_msg boolean 判题时是否输出警告信息
 ---@field clipboard_submit boolean 提交时是否将代码复制到系统剪切板
 ---@field max_workers integer 最大并发测题数量
----@field max_solve_history integer 最大解题历史条目数
----@field confirm_on_duplicate boolean 重复归档时是否弹出确认对话框
+---@field max_archive_history integer 最大归档历史条目数
+---@field confirm_on_duplicate boolean 重复归档到 archive_dir 时是否弹出确认对话框
 ---@field default_time_limit integer 缺省时间限制 (ms)
 ---@field default_memory_limit integer 缺省内存限制 (MB)
 ---@field tc_ui FOJ.UIConfig UI 布局配置
@@ -79,7 +79,7 @@ M.config = {
 	ws_host = "127.0.0.1",
 	ws_port = 10044,
 
-	max_time_out = 5,
+	max_timeout = 5,
 
 	debug = false, -- Debug mode
 	server_mod = "all", -- "http" | "ws" | "all"
@@ -87,7 +87,7 @@ M.config = {
 	work_dir = cache_base, -- Work directory
 	temp_dir = cache_base .. "/.temp", -- Temporary files directory (stress data, submit temp, etc.)
 	data_dir = cache_base .. "/.problem", -- Problem data directory
-	solve_dir = cache_base .. "/.solve", -- Solve Problem data directory
+	archive_dir = cache_base .. "/.archive", -- Archived problem data directory
 	template_dir = cache_base .. "/template", -- Template data directory
 	template_default = "",
 	template_default_ext = ".cpp",
@@ -101,8 +101,8 @@ M.config = {
 	warning_msg = false, -- Show warnings while judging
 	clipboard_submit = false, -- Copy code to clipboard on submit
 	max_workers = 5, -- Max parallel judging workers
-	max_solve_history = 100, -- Max solve history entries
-	confirm_on_duplicate = false, -- Confirm before overwriting duplicate problem in solve_dir
+	max_archive_history = 100, -- Max archive history entries
+	confirm_on_duplicate = false, -- Confirm before overwriting duplicate problem in archive_dir
 
 	default_time_limit = 2000, -- Default time limit (ms)
 	default_memory_limit = 256, -- Default memory limit (MB)
@@ -158,7 +158,7 @@ M.config = {
 		confirm_unsaved = true,
 		mappings = {
 			close = { "<esc>", "<C-c>", "q", "Q" },
-			erase = { "d" },
+			delete = { "d" },
 			write = { "w" },
 			add = { "a" },
 			edit = { "e", "i", "o", "O" },
@@ -174,7 +174,7 @@ M.config = {
 			layout = {
 				{ 3, "tc" },
 				{ 5, "si" },
-				{ 5, "so" },
+				{ 5, "eo" },
 			},
 		},
 		split = {
@@ -185,7 +185,7 @@ M.config = {
 					1,
 					{
 						{ 1, "tc" },
-						{ 1, { 1, "si" }, { 1, "so" } },
+						{ 1, { 1, "si" }, { 1, "eo" } },
 					},
 				},
 			},

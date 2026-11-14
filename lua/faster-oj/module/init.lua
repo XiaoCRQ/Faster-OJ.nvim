@@ -13,11 +13,12 @@ local confirm = require("faster-oj.module.ui.confirm")
 
 ---@class FOJ.moduleModule
 ---@field config FOJ.Config
----@field setup fun(cfg:FOJ.Config)
+---@field setup fun(config:FOJ.Config)
 ---@field submit fun(send:any)
 ---@field run fun(need_compile:boolean)
 ---@field show fun(ctrl:string?)
 ---@field close fun(ctrl:string?)
+---@field delete_problem fun()
 ---@field last_session string|nil
 local M = {}
 
@@ -30,14 +31,14 @@ local function log(level, func, msg)
 	end
 end
 
-function M.setup(cfg)
-	M.config = cfg or {}
-	ui.setup(cfg)
-	utils.setup(cfg)
-	runner.setup(cfg)
-	submit.setup(cfg)
-	edit.setup(cfg)
-	stress_mod.setup(cfg)
+function M.setup(config)
+	M.config = config or {}
+	ui.setup(config)
+	utils.setup(config)
+	runner.setup(config)
+	submit.setup(config)
+	edit.setup(config)
+	stress_mod.setup(config)
 end
 
 function M.submit(send)
@@ -46,11 +47,11 @@ end
 
 ---Effective style of a viewer module.
 ---@param viewer table
----@param cfg_key string
+---@param config_key string
 ---@return string
-local function resolved_style(viewer, cfg_key)
+local function resolved_style(viewer, config_key)
 	return viewer.current_style
-		or (M.config[cfg_key] and M.config[cfg_key].default_style)
+		or (M.config[config_key] and M.config[config_key].default_style)
 		or "float"
 end
 
@@ -80,10 +81,10 @@ local function run_now(need_compile)
 		return
 	end
 
-	local json = utils.get_json_file()
-	local tests = {}
+	local problem = utils.read_problem_json()
+	local testcases = {}
 
-	if json == nil then
+	if problem == nil then
 		log("WARN", "run", "No problem data found")
 		notify.show("No problem data found", "WARN")
 		return
@@ -91,14 +92,14 @@ local function run_now(need_compile)
 
 	vim.cmd("write")
 
-	local test_count = json.testCount or 0
-	local problem_dir = utils.get_problem_dir_from(file_path)
+	local test_count = problem.testCount or 0
+	local problem_dir = utils.get_problem_dir(file_path)
 	for i = 0, test_count - 1 do
 		local tc = utils.read_test_case(problem_dir, i)
-		tests[i + 1] = { input = tc.input, expected = tc.output }
+		testcases[i + 1] = { input = tc.input, expected = tc.expected }
 	end
 
-	ui.update(test_count, tests)
+	ui.update(test_count, testcases)
 
 	local ext = vim.fn.fnamemodify(file_path, ":e")
 	local has_compile = M.config.compile_command[ext]
@@ -135,14 +136,14 @@ local function run_now(need_compile)
 		log("INFO", "run", "Running " .. test_count .. " test(s)")
 		notify.show("Running " .. test_count .. " test(s) ...", "INFO", 2000)
 
-		runner.run(file_path, json, function(res)
+		runner.run(file_path, problem, function(res)
 			log("INFO", "run", "Test " .. res.test_index .. " completed")
-			tests[res.test_index] = res
-			ui.update(test_count, tests)
+			testcases[res.test_index] = res
+			ui.update(test_count, testcases)
 
 			local finished = 0
 			local ac_count = 0
-			for _, t in pairs(tests) do
+			for _, t in pairs(testcases) do
 				finished = finished + 1
 				if t.state and t.state.type == "AC" then
 					ac_count = ac_count + 1
@@ -332,10 +333,10 @@ function M.stress(opts)
 	with_edit_closed(resolved_style(stress_ui, "stress_ui"), do_stress)
 end
 
-function M.erase()
+function M.delete_problem()
 	local file_path = utils.get_file_path()
 	local file_name = vim.fn.fnamemodify(file_path, ":t:r")
-	local problem_dir = utils.get_problem_dir()
+	local problem_dir = utils.get_current_problem_dir()
 	if file_path == "" or file_name == "" then
 		return
 	end
@@ -356,13 +357,13 @@ function M.erase()
 			if vim.api.nvim_buf_is_valid(bufnr) then
 				vim.api.nvim_buf_delete(bufnr, { force = true })
 			end
-			utils.erase(file_path)
+			utils.delete_file(file_path)
 			utils.delete_problem_dir(problem_dir)
 			notify.show("Deleted: " .. file_name, "INFO")
 		end,
 	})
 	if not opened then
-		log("WARN", "erase", "Confirmation unavailable")
+		log("WARN", "delete_problem", "Confirmation unavailable")
 		notify.show("Resolve the pending dialog first", "WARN")
 	end
 end

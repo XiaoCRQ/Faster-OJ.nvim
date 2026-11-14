@@ -7,9 +7,9 @@ local ui_engine = require("faster-oj.module.ui")
 local notify = require("faster-oj.module.notify")
 
 ---@class FOJ.StressModule
----@field last_config table|nil
+---@field last_opts table|nil
 local M = {}
-M.last_config = nil
+M.last_opts = nil
 
 ---@param level string
 ---@param func string
@@ -20,9 +20,9 @@ local function log(level, func, msg)
 	end
 end
 
-function M.setup(cfg)
-	M.config = cfg or {}
-	stress_ui.setup(cfg)
+function M.setup(config)
+	M.config = config or {}
+	stress_ui.setup(config)
 end
 
 -- ── Picker ──────────────────────────────────────────────
@@ -57,23 +57,23 @@ local function pick_files(dir, cb)
 				table.insert(file_list, f)
 			end
 		end
-			vim.ui.select(file_list, {
-				prompt = "Select data files (" .. #selected .. " selected) - [Done] to finish",
-			}, function(choice)
-				if not choice then
-					cb(false)
-					return
-				end
-				if choice == "[Done]" then
-					cb(#selected > 0 and selected or nil)
-					return
-				end
-				table.insert(selected, choice)
-				pick_next()
-			end)
-		end
-		pick_next()
+		vim.ui.select(file_list, {
+			prompt = "Select data files (" .. #selected .. " selected) - [Done] to finish",
+		}, function(choice)
+			if not choice then
+				cb(false)
+				return
+			end
+			if choice == "[Done]" then
+				cb(#selected > 0 and selected or nil)
+				return
+			end
+			table.insert(selected, choice)
+			pick_next()
+		end)
 	end
+	pick_next()
+end
 
 -- ── Source resolvers ────────────────────────────────────
 
@@ -135,13 +135,13 @@ local function resolve_data(source, cb)
 					cb(nil)
 					return
 				end
-			local inputs = {}
-			for _, p in ipairs(paths) do
-				local content = utils.read_file(p) or ""
-				table.insert(inputs, { input = content, label = vim.fn.fnamemodify(p, ":t") })
-			end
-			cb(inputs)
-		end)
+				local inputs = {}
+				for _, p in ipairs(paths) do
+					local content = utils.read_file(p) or ""
+					table.insert(inputs, { input = content, label = vim.fn.fnamemodify(p, ":t") })
+				end
+				cb(inputs)
+			end)
 		end)
 	elseif source.type == "data" then
 		local temp_dir = M.config.temp_dir or ".temp"
@@ -191,14 +191,14 @@ end
 ---@param test_cmd FOJ.Command
 ---@param correct_vars table
 ---@param test_vars table
----@param input_data {input:string, label:string}
----@param tl_ms integer
----@param ml_mb integer
+---@param data_item {input:string, label:string}
+---@param time_limit_ms integer
+---@param memory_limit_mb integer
 ---@param cb fun(res:table)
-local function run_paired(correct_cmd, test_cmd, correct_vars, test_vars, input_data, tl_ms, ml_mb, cb)
+local function run_paired(correct_cmd, test_cmd, correct_vars, test_vars, data_item, time_limit_ms, memory_limit_mb, cb)
 	local res = {
-		input = input_data.input,
-		label = input_data.label,
+		input = data_item.input,
+		label = data_item.label,
 		correct = nil,
 		test = nil,
 		match = nil,
@@ -210,19 +210,19 @@ local function run_paired(correct_cmd, test_cmd, correct_vars, test_vars, input_
 			return
 		end
 		if res.correct.state.type == "OK" and res.test.state.type == "OK" then
-			res.match = (res.correct.output == res.test.output)
+			res.match = (res.correct.actual == res.test.actual)
 		else
 			res.match = false
 		end
 		cb(res)
 	end
 
-	runner.run_single(correct_cmd, correct_vars, input_data.input, tl_ms, ml_mb, nil, function(raw)
+	runner.run_single(correct_cmd, correct_vars, data_item.input, time_limit_ms, memory_limit_mb, nil, function(raw)
 		res.correct = raw
 		correct_done = true
 		try_finish()
 	end)
-	runner.run_single(test_cmd, test_vars, input_data.input, tl_ms, ml_mb, nil, function(raw)
+	runner.run_single(test_cmd, test_vars, data_item.input, time_limit_ms, memory_limit_mb, nil, function(raw)
 		res.test = raw
 		test_done = true
 		try_finish()
@@ -234,17 +234,17 @@ end
 ---@param opts? table
 function M.stress(opts)
 	if not opts then
-		if not M.last_config then
+		if not M.last_opts then
 			notify.show("No previous stress config. Provide arguments.", "ERROR")
 			return
 		end
-		opts = M.last_config
+		opts = M.last_opts
 		log("INFO", "stress", "Re-running last config")
 	end
 
-	M.last_config = opts
-	local tl_ms = opts.timeLimit or M.config.default_time_limit or 2000
-	local ml_mb = opts.memoryLimit or M.config.default_memory_limit or 256
+	M.last_opts = opts
+	local time_limit_ms = opts.timeLimit or M.config.default_time_limit or 2000
+	local memory_limit_mb = opts.memoryLimit or M.config.default_memory_limit or 256
 
 	if not opts.correct then
 		notify.show("Missing 'correct'. Usage: correct=path:FILE or correct=find:", "ERROR")
@@ -296,7 +296,7 @@ function M.stress(opts)
 					if not c_ok then
 						notify.spinner_fail(spin, "Correct code compilation FAILED")
 						stress_ui.state.size = 0
-						stress_ui.state.results = {}
+						stress_ui.state.testcases = {}
 						stress_ui.show()
 						stress_ui.update(0, {})
 						return
@@ -307,7 +307,7 @@ function M.stress(opts)
 						if not t_ok then
 							notify.spinner_fail(spin, "Test code compilation FAILED")
 							stress_ui.state.size = 0
-							stress_ui.state.results = {}
+							stress_ui.state.testcases = {}
 							stress_ui.show()
 							stress_ui.update(0, {})
 							return
@@ -330,12 +330,12 @@ function M.stress(opts)
 						end
 
 						stress_ui.state.size = #inputs
-						stress_ui.state.results = {}
+						stress_ui.state.testcases = {}
 						stress_ui.show()
 						stress_ui.update(#inputs, {})
 
 						local active, idx = 0, 1
-						local results = {}
+						local testcases = {}
 						local max_workers = M.config.max_workers or 4
 
 						local function fill_queue()
@@ -348,17 +348,17 @@ function M.stress(opts)
 									correct_vars,
 									test_vars,
 									inputs[i],
-									tl_ms,
-									ml_mb,
+									time_limit_ms,
+									memory_limit_mb,
 									function(res)
 										res.index = i
-										results[i] = res
+										testcases[i] = res
 										active = active - 1
-										stress_ui.update(#inputs, results)
+										stress_ui.update(#inputs, testcases)
 										fill_queue()
 
 										local finished, matched = 0, 0
-										for _, r in pairs(results) do
+										for _, r in pairs(testcases) do
 											finished = finished + 1
 											if r.match then
 												matched = matched + 1
@@ -395,7 +395,7 @@ function M.stress(opts)
 			if not opts.data then
 				-- 尝试从 correct/test 的题目数据目录自动加载
 				local function try_load_data(src_path)
-					local dir = utils.get_problem_dir_from(src_path)
+					local dir = utils.get_problem_dir(src_path)
 					if dir == "" or not utils.dir_exists(dir) then return nil end
 					local tc_count = utils.get_test_count(dir)
 					if tc_count == 0 then return nil end

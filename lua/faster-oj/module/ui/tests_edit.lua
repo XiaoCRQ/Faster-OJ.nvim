@@ -6,19 +6,17 @@ local tc_view = require("faster-oj.module.ui.tc_view")
 local notify = require("faster-oj.module.notify")
 local confirm = require("faster-oj.module.ui.confirm")
 
-local uv = vim.uv or vim.loop
-
 local M = {}
 local GROUP = "EditUI"
 
-local TITLES = { tc = "Testcases (Edit)", si = "Input", so = "Output" }
+local TITLES = { tc = "Testcases (Edit)", si = "Input", eo = "Expected Output" }
 local WIN_OPTS = {
 	tc = { number = false, focus = true },
 	si = { number = true },
-	so = { number = true },
+	eo = { number = true },
 }
 
-local EDIT_CYCLE = { "si", "so" }
+local EDIT_CYCLE = { "si", "eo" }
 
 ---One TC is open at a time.
 ---disk_count:     number of .in/.out pairs on disk.
@@ -34,8 +32,8 @@ local function fresh_state()
 		disk_count = 0,
 		current_index = 1,
 		pending_new = false,
-		raw = { input = nil, output = nil },
-		live = { input = "", output = "" },
+		raw = { input = nil, expected = nil },
+		live = { input = "", expected = "" },
 		busy = false,
 	}
 end
@@ -52,8 +50,8 @@ local function log(level, func, msg)
 	end
 end
 
-function M.setup(cfg)
-	M.config = cfg or {}
+function M.setup(config)
+	M.config = config or {}
 	M.current_style = M.config.tc_edit_ui and M.config.tc_edit_ui.default_style or "float"
 end
 
@@ -68,8 +66,8 @@ local function get_style_config()
 end
 
 local function confirm_enabled()
-	local cfg = M.config.tc_edit_ui or {}
-	return cfg.confirm_unsaved ~= false
+	local config = M.config.tc_edit_ui or {}
+	return config.confirm_unsaved ~= false
 end
 
 local function normalize(text)
@@ -104,7 +102,7 @@ local function render_current()
 		return
 	end
 	set_lines(inst.bufs.si, vim.split(M.state.live.input or "", "\n"))
-	set_lines(inst.bufs.so, vim.split(M.state.live.output or "", "\n"))
+	set_lines(inst.bufs.eo, vim.split(M.state.live.expected or "", "\n"))
 end
 
 ---Capture the open buffers into `live`.
@@ -115,12 +113,12 @@ local function capture_current(inst)
 	if not inst or not inst.bufs then
 		return false
 	end
-	local si, so = inst.bufs.si, inst.bufs.so
-	if not (si and so and vim.api.nvim_buf_is_valid(si) and vim.api.nvim_buf_is_valid(so)) then
+	local si, eo = inst.bufs.si, inst.bufs.eo
+	if not (si and eo and vim.api.nvim_buf_is_valid(si) and vim.api.nvim_buf_is_valid(eo)) then
 		return false
 	end
 	M.state.live.input = table.concat(vim.api.nvim_buf_get_lines(si, 0, -1, false), "\n")
-	M.state.live.output = table.concat(vim.api.nvim_buf_get_lines(so, 0, -1, false), "\n")
+	M.state.live.expected = table.concat(vim.api.nvim_buf_get_lines(eo, 0, -1, false), "\n")
 	return true
 end
 
@@ -131,7 +129,7 @@ local function has_unsaved_changes()
 	capture_current()
 	-- Compare normalized text: one trailing blank line is not a real edit.
 	return normalize(M.state.live.input) ~= normalize(M.state.raw.input)
-		or normalize(M.state.live.output) ~= normalize(M.state.raw.output)
+		or normalize(M.state.live.expected) ~= normalize(M.state.raw.expected)
 end
 
 local function focus_tc_row()
@@ -155,32 +153,11 @@ local function load_case(index)
 	local dir = M.state.problem_dir
 	local file_idx = index - 1
 	M.state.raw.input = utils.read_file(dir .. file_idx .. ".in")
-	M.state.raw.output = utils.read_file(dir .. file_idx .. ".out")
+	M.state.raw.expected = utils.read_file(dir .. file_idx .. ".out")
 	M.state.live.input = normalize(M.state.raw.input)
-	M.state.live.output = normalize(M.state.raw.output)
+	M.state.live.expected = normalize(M.state.raw.expected)
 	M.state.current_index = index
 	render_current()
-end
-
-local function scan_disk_count(dir)
-	local max_idx = -1
-	local handle = uv.fs_scandir(dir)
-	if handle then
-		while true do
-			local name = uv.fs_scandir_next(handle)
-			if not name then
-				break
-			end
-			local idx = name:match("^(%d+)%.in$") or name:match("^(%d+)%.out$")
-			if idx then
-				idx = tonumber(idx)
-				if idx and idx > max_idx then
-					max_idx = idx
-				end
-			end
-		end
-	end
-	return max_idx + 1
 end
 
 ---Discard unsaved edits (and a pending new TC, if any).
@@ -191,7 +168,7 @@ local function discard_current_edits()
 		update_tc_list()
 	end
 	M.state.live.input = normalize(M.state.raw.input)
-	M.state.live.output = normalize(M.state.raw.output)
+	M.state.live.expected = normalize(M.state.raw.expected)
 	render_current()
 end
 
@@ -199,8 +176,8 @@ end
 local function begin_pending_case()
 	M.state.pending_new = true
 	M.state.current_index = tc_count()
-	M.state.raw.input, M.state.raw.output = nil, nil
-	M.state.live.input, M.state.live.output = "", ""
+	M.state.raw.input, M.state.raw.expected = nil, nil
+	M.state.live.input, M.state.live.expected = "", ""
 end
 
 ---Save the open TC to disk and refresh problem.json.
@@ -215,18 +192,18 @@ function M.save()
 	local dir = M.state.problem_dir
 	local file_idx = M.state.current_index - 1
 	local was_pending = M.state.pending_new
-	local in_content, out_content
+	local in_content, expected_content
 
 	if was_pending then
-		in_content, out_content = M.state.live.input, M.state.live.output
+		in_content, expected_content = M.state.live.input, M.state.live.expected
 	else
 		-- Preserve exact bytes for unchanged TCs.
 		in_content = (M.state.raw.input ~= nil and M.state.live.input == normalize(M.state.raw.input))
 			and M.state.raw.input
 			or M.state.live.input
-		out_content = (M.state.raw.output ~= nil and M.state.live.output == normalize(M.state.raw.output))
-			and M.state.raw.output
-			or M.state.live.output
+		expected_content = (M.state.raw.expected ~= nil and M.state.live.expected == normalize(M.state.raw.expected))
+			and M.state.raw.expected
+			or M.state.live.expected
 	end
 
 	local function cleanup_partial()
@@ -243,7 +220,7 @@ function M.save()
 		notify.show("Failed to save test data", "ERROR")
 		return false
 	end
-	if not utils.write_file(dir .. file_idx .. ".out", out_content) then
+	if not utils.write_file(dir .. file_idx .. ".out", expected_content) then
 		cleanup_partial()
 		notify.show("Failed to save test data", "ERROR")
 		return false
@@ -270,8 +247,8 @@ function M.save()
 		M.state.disk_count = data.testCount
 	end
 
-	M.state.raw.input, M.state.raw.output = in_content, out_content
-	M.state.live.input, M.state.live.output = normalize(in_content), normalize(out_content)
+	M.state.raw.input, M.state.raw.expected = in_content, expected_content
+	M.state.live.input, M.state.live.expected = normalize(in_content), normalize(expected_content)
 
 	notify.show("Problem data saved", "INFO")
 	log("INFO", "save", string.format("Saved TC %d to %s", file_idx, dir))
@@ -564,7 +541,7 @@ function M.bind_keys()
 				move(-1)
 			end)
 			tc_view.bind(buf, maps.add, M.add)
-			tc_view.bind(buf, maps.erase, M.delete_current)
+			tc_view.bind(buf, maps.delete, M.delete_current)
 		else
 			tc_view.bind(buf, maps.close, focus_tc)
 			tc_view.bind(buf, maps.edit_focus_next, function()
@@ -623,7 +600,7 @@ function M.edit(style)
 			return
 		end
 
-		local problem_dir = utils.get_problem_dir_from(file_path)
+		local problem_dir = utils.get_problem_dir(file_path)
 		if problem_dir == "" then
 			notify.show("No problem data directory", "WARN")
 			return
@@ -664,7 +641,7 @@ function M.edit(style)
 			return
 		end
 
-		M.state.disk_count = scan_disk_count(problem_dir)
+		M.state.disk_count = utils.scan_test_count(problem_dir)
 		if M.state.disk_count == 0 then
 			begin_pending_case()
 		else
