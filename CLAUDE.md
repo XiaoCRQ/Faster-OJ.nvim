@@ -194,3 +194,15 @@ Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
 - **scope**: module name affected (e.g. stress, run, submit, ui)
 - **brief description**: one-line summary of changes
 - **detailed description**: list specific changes, impact scope, backward compatibility notes
+
+### Sync AGENTS.md after every commit (mandatory)
+
+**After completing a commit, always re-check and update the architecture notes in this file.** If the change touches any of the following, update this file in the same commit (or a doc commit immediately after):
+
+- directory layout or file names (added/removed/renamed modules)
+- module responsibilities, public function names, async/callback conventions
+- config fields, defaults, commands, keymaps
+- data formats (`problem.json`, `.history`, problem data layout)
+- workflows, branching rules, commit conventions
+
+Keep the Chinese `AGENTS.md` in sync; this file must stay English. When docs and code disagree, code wins — fix the docs immediately.
