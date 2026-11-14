@@ -32,7 +32,7 @@
 2. **抓取题目** — 在浏览器中点击题目链接，[Competitive Companion](https://github.com/jmerle/competitive-companion) 插件会将题目发送至 Neovim，自动在 `work_dir` 下创建源文件和测试数据
 3. **编写解答** — 编辑生成的源文件
 4. **本地评测** — `<leader>cdt` 编译并运行所有测试用例，结果展示在多面板 UI 中，支持逐行/逐 token 对比
-5. **对拍测试（可选）** — `<leader>cdP` 交互选取两份代码，或直接指定路径：`:FOJ stress correct=path:"brute.cpp" test=path:"solve.cpp"`
+5. **对拍测试（可选）** — `<leader>cdP` 交互选取两份代码，或直接指定路径：`:FOJ stress correct=path:"brute.cpp" test=path:"solution.cpp"`
 6. **提交** — `<leader>cdr` 通过 WebSocket 经浏览器插件提交代码
 
 ---
@@ -70,7 +70,7 @@ local code_path = vim.fn.expand("~/Work/Program/CodeForces")
     work_dir = code_path,
     temp_dir = code_path .. "/.temp",
     data_dir = code_path .. "/.problem",
-    solve_dir = code_path .. "/.solve",
+    archive_dir = code_path .. "/.archive",
     template_dir = code_path .. "/.template",
     template_default = code_path .. "/.template/template.cpp",
   },
@@ -101,9 +101,9 @@ map("n", "<leader>cde", ":FOJ show edit<CR>",    vim.tbl_extend("force", opts, {
 map("n", "<leader>cdC", ":FOJ close<CR>",         vim.tbl_extend("force", opts, { desc = "FOJ: 关闭所有 UI 窗口" }))
 
 -- 数据管理
-map("n", "<leader>cds", ":FOJ solve<CR>",        vim.tbl_extend("force", opts, { desc = "FOJ: Mark as solved" }))
-map("n", "<leader>cdS", ":FOJ solve back<CR>",   vim.tbl_extend("force", opts, { desc = "FOJ: Undo solved mark" }))
-map("n", "<leader>cdd", ":FOJ erase<CR>",        vim.tbl_extend("force", opts, { desc = "FOJ: Delete problem data" }))
+map("n", "<leader>cds", ":FOJ archive<CR>",      vim.tbl_extend("force", opts, { desc = "FOJ: Archive problem" }))
+map("n", "<leader>cdS", ":FOJ archive back<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Restore archived problem" }))
+map("n", "<leader>cdd", ":FOJ delete<CR>",       vim.tbl_extend("force", opts, { desc = "FOJ: Delete problem data" }))
 
 -- 查找器
 map("n", "<leader>cdc", ":FOJ find template<CR>", vim.tbl_extend("force", opts, { desc = "FOJ: Find templates" }))
@@ -163,9 +163,9 @@ map("n", "<leader>cdP", ":FOJ stress correct=find: test=find:<CR>",
 
 | 命令 | 说明 |
 | --- | --- |
-| `:FOJ solve` | 标记已解决，移动至 `solve_dir` |
-| `:FOJ solve back` | 撤销上次 solve，还原文件 |
-| `:FOJ erase` | 删除题目源码及数据目录 |
+| `:FOJ archive` | 归档题目，移动至 `archive_dir` 并记录历史 |
+| `:FOJ archive back` | 撤销上一次归档，还原文件 |
+| `:FOJ delete` | 删除题目源码及数据目录 |
 
 ### 查找器
 
@@ -203,13 +203,13 @@ map("n", "<leader>cdP", ":FOJ stress correct=find: test=find:<CR>",
 :FOJ stress correct=find: test=find:
 
 " 直接指定路径
-:FOJ stress correct=path:brute.py test=path:solve.cpp
+:FOJ stress correct=path:brute.py test=path:solution.cpp
 
 " 路径含空格（使用引号）
-:FOJ stress correct=path:"my brute.cpp" test=path:'solve.cpp'
+:FOJ stress correct=path:"my brute.cpp" test=path:'solution.cpp'
 
 " C++ 原始字符串引用
-:FOJ stress correct=path:R"(brute.cpp)" test=path:R"(solve.cpp)"
+:FOJ stress correct=path:R"(brute.cpp)" test=path:R"(solution.cpp)"
 
 " 含原始数据和时限/内存限制
 :FOJ stress correct=path:a.cpp test=path:b.cpp data=data:5\n1 2 3 time=1000 mem=512
@@ -225,7 +225,7 @@ map("n", "<leader>cdP", ":FOJ stress correct=find: test=find:<CR>",
 | --- | --- | --- | --- |
 | `work_dir` | string | `vim.fn.stdpath("data") .. "/faster-oj"` | 工作目录 |
 | `data_dir` | string | `".problem"` | 题目数据目录（相对 `work_dir`） |
-| `solve_dir` | string | `".solve"` | 已解决题目归档（相对 `work_dir`） |
+| `archive_dir` | string | `".archive"` | 已归档题目目录（相对 `work_dir`） |
 | `temp_dir` | string | `".temp"` | 临时文件目录（相对 `work_dir`） |
 | `template_dir` | string | `""` | 模板目录 |
 | `template_default` | string | `""` | 默认模板文件 |
@@ -241,7 +241,7 @@ map("n", "<leader>cdP", ":FOJ stress correct=find: test=find:<CR>",
 | `ws_host` | string | `"127.0.0.1"` | WebSocket 绑定地址 |
 | `ws_port` | integer | `10044` | WebSocket 端口 |
 | `server_mod` | string | `"all"` | 启动模式: `http` / `ws` / `all` |
-| `max_time_out` | integer | `5` | 浏览器连接超时 (s) |
+| `max_timeout` | integer | `5` | 浏览器连接超时 (s) |
 
 ### 评测
 
@@ -255,7 +255,7 @@ map("n", "<leader>cdP", ":FOJ stress correct=find: test=find:<CR>",
 | `default_memory_limit` | integer | `256` | 默认内存限制 (MB) |
 | `linux_mem_offset` | integer | `-2900` | Linux 内存偏移 (KB) |
 | `macos_mem_offset` | integer | `-1500` | macOS 内存偏移 (KB) |
-| `max_solve_history` | integer | `100` | solve 历史上限 |
+| `max_archive_history` | integer | `100` | 归档历史上限 |
 | `debug` | boolean | `false` | 调试日志 |
 
 ### 变量占位符

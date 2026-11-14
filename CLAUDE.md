@@ -25,11 +25,11 @@ lua/faster-oj/
 │   └── websocket/
 │       └── server.lua      # Spawns mini-wsbroad binary, manages WS lifecycle
 └── module/
-    ├── init.lua            # Orchestrator: run/test/submit/edit/erase/find/stress
+    ├── init.lua            # Orchestrator: run/test/submit/edit/delete/find/stress
     ├── run.lua             # Compile (uv.spawn) + concurrent judging pool + M.run_single()
     ├── stress.lua          # Stress testing: paired execution with picker/file/raw data sources
     ├── submit.lua          # WS submission + optional code obfuscator
-    ├── solve.lua           # Problem archiving with pair-based history (.history file)
+    ├── archive.lua         # Problem archiving with pair-based history (.history file)
     ├── notify.lua          # Single-window floating notification + spinner animation
     ├── utils.lua           # File I/O, JSON r/w, variable expansion, test case helpers
     └── ui/
@@ -47,7 +47,7 @@ lua/faster-oj/
 `vim.uv` (or `vim.loop` fallback). No external job libraries. Compile and test execution use `uv.spawn`. UI operations use `vim.schedule()` when called from libuv callbacks.
 
 ### Fast event context restriction
-Neovim API functions (`vim.fn.mkdir`, `nvim_buf_get_name`, etc.) MUST NOT be called from libuv callbacks. Use `os.execute()` for filesystem ops inside callbacks. Use `vim.schedule()` to defer Neovim API calls. Functions like `utils.get_problem_dir()` that read the current buffer must only be called from main context; use `utils.get_problem_dir_from(file_path)` in async contexts.
+Neovim API functions (`vim.fn.mkdir`, `nvim_buf_get_name`, etc.) MUST NOT be called from libuv callbacks. Use `os.execute()` for filesystem ops inside callbacks. Use `vim.schedule()` to defer Neovim API calls. If a utility reads the current buffer (e.g. `utils.get_current_problem_dir()`), call it only from the main context; pass an explicit path instead (e.g. `utils.get_problem_dir(file_path)`) in async contexts.
 
 ### Config: deep merge with defaults
 `vim.tbl_deep_extend("force", defaults, user_opts)` — user overrides take priority. `compile_command` / `run_command` keys are **file extensions** (e.g., `py`, `js`, `rs`, `kt`, `pas`), not language names. Config field `data_dir` (was `json_dir`).
@@ -94,8 +94,8 @@ Read via `utils.read_test_case(dir, index)`, test count from `utils.get_test_cou
 
 Problem names received from the browser are sanitized: characters invalid on Linux/macOS/Windows (`/ \ : * ? " < > |` and control characters) are replaced with `_`; runs of `_` are collapsed; leading/trailing whitespace and trailing dots/spaces are trimmed; empty results fall back to `problem`; Windows reserved device names (`CON`, `PRN`, `AUX`, `NUL`, `COM1`-`COM9`, `LPT1`-`LPT9`) are prefixed with `_`. The same sanitized name is used for the data folder and the source file name, while `problem.json.name` keeps the original title. If a different original title sanitizes to an existing folder, the handler asks before overwriting that problem's data.
 
-### Solve history format
-`.history` file, one line per solve. Tab-separated path pairs `from\tto` — each pair is a `uv.fs_rename` move. `solve_back()` reverses pairs in order. Max entries controlled by `max_solve_history` (default 100).
+### Archive history format
+`.history` file, one line per archive operation. Tab-separated path pairs `from\tto` — each pair is a `uv.fs_rename` move. `M.restore()` reverses pairs in order. Max entries controlled by `max_archive_history` (default 100).
 
 ### Stress testing
 `M.stress(opts)` — `opts` fields:
@@ -124,10 +124,10 @@ Problem names received from the browser are sanitized: characters invalid on Lin
 |-------|---------|-------|
 | `data_dir` | `stdpath("data").."/faster-oj/.problem"` | Problem data directory |
 | `temp_dir` | `stdpath("data").."/faster-oj/.temp"` | Temp files (stress data, submit) |
-| `solve_dir` | `stdpath("data").."/faster-oj/.solve"` | Solved problem archive |
+| `archive_dir` | `stdpath("data").."/faster-oj/.archive"` | Archived problems directory |
 | `default_time_limit` | `2000` | Fallback time limit (ms) |
 | `default_memory_limit` | `256` | Fallback memory limit (MB) |
-| `max_solve_history` | `100` | Max .history entries |
+| `max_archive_history` | `100` | Max .history entries |
 | `clipboard_submit` | `false` | Copy code to `+` register on submit |
 | `tc_edit_ui.confirm_unsaved` | `true` | Confirm unsaved TC switch/close/new and TC deletion |
 | `compile_command` | table | Keyed by file extension |

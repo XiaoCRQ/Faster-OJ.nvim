@@ -43,15 +43,15 @@ local function get_tokens_with_coords(str)
 	return tokens
 end
 
----对比用户输出与标准输出，计算差异范围
----@param user_out string
----@param std_out string
+---对比实际输出与期望输出，计算差异范围
+---@param actual string
+---@param expected string
 ---@param obscure boolean 是否启用词法模糊匹配
 ---@return table|nil diff_ranges
 ---@return boolean accepted
 ---@return string|nil first_msg
-local function compute_diff_ranges(user_out, std_out, obscure)
-	if user_out == std_out then
+local function compute_diff_ranges(actual, expected, obscure)
+	if actual == expected then
 		return nil, true, nil
 	end
 
@@ -77,35 +77,36 @@ local function compute_diff_ranges(user_out, std_out, obscure)
 	end
 
 	if obscure then
-		local u_toks, s_toks = get_tokens_with_coords(user_out), get_tokens_with_coords(std_out)
-		for i = 1, math.max(#u_toks, #s_toks) do
-			local ut, st = u_toks[i], s_toks[i]
-			if not ut then
-				local last = u_toks[#u_toks] or { line = 0, ec = 0 }
-				record(last.line, last.ec, last.ec + 1, st.text, "EOF")
-			elseif not st then
-				record(ut.line, ut.sc, ut.ec, "EOF", ut.text)
-			elseif ut.text ~= st.text then
-				record(ut.line, ut.sc, ut.ec, st.text, ut.text)
+		local actual_toks = get_tokens_with_coords(actual)
+		local expected_toks = get_tokens_with_coords(expected)
+		for i = 1, math.max(#actual_toks, #expected_toks) do
+			local actual_tok, expected_tok = actual_toks[i], expected_toks[i]
+			if not actual_tok then
+				local last = actual_toks[#actual_toks] or { line = 0, ec = 0 }
+				record(last.line, last.ec, last.ec + 1, expected_tok.text, "EOF")
+			elseif not expected_tok then
+				record(actual_tok.line, actual_tok.sc, actual_tok.ec, "EOF", actual_tok.text)
+			elseif actual_tok.text ~= expected_tok.text then
+				record(actual_tok.line, actual_tok.sc, actual_tok.ec, expected_tok.text, actual_tok.text)
 			end
 		end
 	else
-		local u_lines = vim.split(user_out, "\n", { plain = true })
-		local s_lines = vim.split(std_out, "\n", { plain = true })
-		for i = 1, math.max(#u_lines, #s_lines) do
-			local ul, sl = u_lines[i], s_lines[i]
-			if not ul then
-				record(math.max(0, #u_lines - 1), 0, 1, escape(sl), "EOF")
-			elseif not sl then
-				record(i - 1, 0, #ul > 0 and #ul or 1, "EOF", escape(ul))
-			elseif ul ~= sl then
-				local d_idx, min_l = 1, math.min(#ul, #sl)
-				while d_idx <= min_l and ul:sub(d_idx, d_idx) == sl:sub(d_idx, d_idx) do
+		local actual_lines = vim.split(actual, "\n", { plain = true })
+		local expected_lines = vim.split(expected, "\n", { plain = true })
+		for i = 1, math.max(#actual_lines, #expected_lines) do
+			local actual_line, expected_line = actual_lines[i], expected_lines[i]
+			if not actual_line then
+				record(math.max(0, #actual_lines - 1), 0, 1, escape(expected_line), "EOF")
+			elseif not expected_line then
+				record(i - 1, 0, #actual_line > 0 and #actual_line or 1, "EOF", escape(actual_line))
+			elseif actual_line ~= expected_line then
+				local d_idx, min_l = 1, math.min(#actual_line, #expected_line)
+				while d_idx <= min_l and actual_line:sub(d_idx, d_idx) == expected_line:sub(d_idx, d_idx) do
 					d_idx = d_idx + 1
 				end
-				local e_char = sl:sub(d_idx, d_idx)
-				local f_char = ul:sub(d_idx, d_idx)
-				record(i - 1, d_idx - 1, math.max(d_idx, #ul), escape(e_char), escape(f_char))
+				local expected_char = expected_line:sub(d_idx, d_idx)
+				local actual_char = actual_line:sub(d_idx, d_idx)
+				record(i - 1, d_idx - 1, math.max(d_idx, #actual_line), escape(expected_char), escape(actual_char))
 			end
 		end
 	end
@@ -121,10 +122,10 @@ end
 ---
 ---@param cmd_raw FOJ.Command 用户命令配置
 ---@param vars table 占位符变量
----@param tl_ms integer 时间限制 (ms)
+---@param time_limit_ms integer 时间限制 (ms)
 ---@return string exec
 ---@return string[] args
-local function build_exec_cmd(cmd_raw, vars, tl_ms)
+local function build_exec_cmd(cmd_raw, vars, time_limit_ms)
 	local user_exec = utils.expand(cmd_raw.exec, vars)
 	local user_args = vim.tbl_map(function(a)
 		return utils.expand(a, vars)
@@ -158,7 +159,7 @@ local function build_exec_cmd(cmd_raw, vars, tl_ms)
 			and ("-ArgumentList " .. table.concat(arg_parts, ", "))
 			or ""
 
-		local tl_ms_int = tl_ms + 500
+		local timeout_ms = time_limit_ms + 500
 
 		local ps_script = string.format(
 			"$if='%s';$of='%s';$ef='%s';"
@@ -187,7 +188,7 @@ local function build_exec_cmd(cmd_raw, vars, tl_ms)
 			esc(err_file),
 			esc(user_exec),
 			arg_list,
-			tl_ms_int
+			timeout_ms
 		)
 		log("INFO", "build_exec_cmd", "Windows PowerShell with temp-file I/O redirection")
 		return "powershell", { "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script }
@@ -206,16 +207,16 @@ local function build_exec_cmd(cmd_raw, vars, tl_ms)
 	end
 
 	-- Linux: timeout -s 9 (硬超时) + /usr/bin/time -v (内存)
-	local tl_sec = math.ceil(tl_ms / 1000)
+	local time_limit_seconds = math.ceil(time_limit_ms / 1000)
 	if has_time_bin then
-		log("INFO", "build_exec_cmd", string.format("Linux timeout=%ds + /usr/bin/time -v", tl_sec))
-		local args = { "-s", "9", tostring(tl_sec), "/usr/bin/time", "-v", user_exec }
+		log("INFO", "build_exec_cmd", string.format("Linux timeout=%ds + /usr/bin/time -v", time_limit_seconds))
+		local args = { "-s", "9", tostring(time_limit_seconds), "/usr/bin/time", "-v", user_exec }
 		vim.list_extend(args, user_args)
 		return "timeout", args
 	end
 
 	log("WARN", "build_exec_cmd", "/usr/bin/time not found, memory tracking disabled")
-	local args = { "-s", "9", tostring(tl_sec), user_exec }
+	local args = { "-s", "9", tostring(time_limit_seconds), user_exec }
 	vim.list_extend(args, user_args)
 	return "timeout", args
 end
@@ -327,16 +328,16 @@ function M.compile(file_path, need_compile, on_compile_finish)
 end
 
 ---执行单次运行 (不比较输出，供判题和对拍复用)
----cb 接收 {output, used_time, used_memory, is_killed, is_ole, code, signal, clean_err}
+---cb 接收 {actual, expected, used_time, used_memory, is_killed, is_ole, code, signal, clean_err}
 ---@param cmd_raw FOJ.Command
 ---@param vars table
 ---@param input string
----@param tl_ms integer
----@param ml_mb integer
----@param std_out string|nil
+---@param time_limit_ms integer
+---@param memory_limit_mb integer
+---@param expected string|nil
 ---@param cb fun(res:table)
-function M.run_single(cmd_raw, vars, input, tl_ms, ml_mb, std_out, cb)
-	local final_exec, final_args = build_exec_cmd(cmd_raw, vars, tl_ms)
+function M.run_single(cmd_raw, vars, input, time_limit_ms, memory_limit_mb, expected, cb)
+	local final_exec, final_args = build_exec_cmd(cmd_raw, vars, time_limit_ms)
 	local stdout, stderr, stdin = uv.new_pipe(false), uv.new_pipe(false), uv.new_pipe(false)
 
 	local out_chunks, err_chunks = {}, {}
@@ -366,7 +367,7 @@ function M.run_single(cmd_raw, vars, input, tl_ms, ml_mb, std_out, cb)
 			safe_close(handle)
 
 			local duration = math.floor((uv.hrtime() - start_time) / 1e6)
-			local user_out = table.concat(out_chunks):gsub("\r\n", "\n")
+			local actual_output = table.concat(out_chunks):gsub("\r\n", "\n")
 			local max_rss_kb, clean_err = parse_memory_and_err(table.concat(err_chunks))
 
 			-- 平台内存偏移
@@ -375,8 +376,8 @@ function M.run_single(cmd_raw, vars, input, tl_ms, ml_mb, std_out, cb)
 
 			local res = {
 				input = input,
-				output = user_out,
-				expected = std_out,
+				actual = actual_output,
+				expected = expected,
 				used_time = duration,
 				used_memory = max_rss_kb,
 				state = { type = "AC" },
@@ -385,9 +386,9 @@ function M.run_single(cmd_raw, vars, input, tl_ms, ml_mb, std_out, cb)
 			-- 状态判定 (OLE > MLE > TLE > RE > OK)
 			if is_ole then
 				res.state = { type = "OLE", msg = "Output Limit Exceeded" }
-			elseif ml_mb > 0 and (max_rss_kb / 1024) > ml_mb then
+			elseif memory_limit_mb > 0 and (max_rss_kb / 1024) > memory_limit_mb then
 				res.state = { type = "MLE" }
-			elseif is_killed or duration > tl_ms then
+			elseif is_killed or duration > time_limit_ms then
 				res.state = { type = "TLE" }
 			elseif code ~= 0 or signal ~= 0 then
 				res.state = { type = "RE", msg = clean_err ~= "" and clean_err or "Runtime Error" }
@@ -402,7 +403,7 @@ function M.run_single(cmd_raw, vars, input, tl_ms, ml_mb, std_out, cb)
 	-- On Windows, extend the grace period so PowerShell's internal WaitForExit
 	-- and temp-file output readback can finish before the UV timer fires.
 	timer = uv.new_timer()
-	timer:start(tl_ms + (is_win and 2500 or 500), 0, force_kill)
+	timer:start(time_limit_ms + (is_win and 2500 or 500), 0, force_kill)
 
 	if input and input ~= "" then
 		stdin:write(input, function()
@@ -435,18 +436,18 @@ end
 ---@param cmd_raw FOJ.Command
 ---@param vars table
 ---@param input string
----@param std_out string
----@param tl_ms integer
----@param ml_mb integer
+---@param expected string
+---@param time_limit_ms integer
+---@param memory_limit_mb integer
 ---@param cb fun(res:table)
-local function run_single_task(cmd_raw, vars, input, std_out, tl_ms, ml_mb, cb)
-	M.run_single(cmd_raw, vars, input, tl_ms, ml_mb, std_out, function(raw)
+local function run_single_task(cmd_raw, vars, input, expected, time_limit_ms, memory_limit_mb, cb)
+	M.run_single(cmd_raw, vars, input, time_limit_ms, memory_limit_mb, expected, function(raw)
 		if M.config.warning_msg and last_compile_msg then
 			raw.state.msg = last_compile_msg
 		end
 
 		if raw.state.type == "OK" then
-			local diffs, ok, msg = compute_diff_ranges(raw.output, std_out, M.config.obscure)
+			local diffs, ok, msg = compute_diff_ranges(raw.actual, expected, M.config.obscure)
 			if not ok then
 				raw.state = { type = "WA", msg = msg }
 				raw.diff = diffs
@@ -464,13 +465,13 @@ end
 
 ---并发判题入口
 ---@param file_path string 源文件路径
----@param json table 题目数据 (problem.json 内容: testCount, timeLimit, memoryLimit)
+---@param problem table 题目数据 (problem.json 内容: testCount, timeLimit, memoryLimit)
 ---@param on_case_finish fun(res:table) 每个测试用例完成时的回调
-function M.run(file_path, json, on_case_finish)
+function M.run(file_path, problem, on_case_finish)
 	local ext = vim.fn.fnamemodify(file_path, ":e")
 	local cmd_raw = M.config.run_command[ext]
-	local test_count = json.testCount or 0
-	local problem_dir = utils.get_problem_dir_from(file_path)
+	local test_count = problem.testCount or 0
+	local problem_dir = utils.get_problem_dir(file_path)
 
 	if not cmd_raw then
 		log("ERROR", "run", "No run_command for extension: " .. ext)
@@ -496,9 +497,9 @@ function M.run(file_path, json, on_case_finish)
 				cmd_raw,
 				vars,
 				tests[i].input,
-				tests[i].output,
-				json.timeLimit or (M.config and M.config.default_time_limit) or 2000,
-				json.memoryLimit or (M.config and M.config.default_memory_limit) or 256,
+				tests[i].expected,
+				problem.timeLimit or (M.config and M.config.default_time_limit) or 2000,
+				problem.memoryLimit or (M.config and M.config.default_memory_limit) or 256,
 				function(res)
 					res.test_index = i
 					active = active - 1
@@ -511,9 +512,9 @@ function M.run(file_path, json, on_case_finish)
 	fill_queue()
 end
 
-function M.setup(cfg)
-	M.config = cfg
-	utils.setup(cfg)
+function M.setup(config)
+	M.config = config
+	utils.setup(config)
 end
 
 return M

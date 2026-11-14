@@ -39,8 +39,8 @@ local function get_bin_path()
 	return bin_dir .. "/" .. bin_name
 end
 
-function M.setup(cfg)
-	M.config = cfg or {}
+function M.setup(config)
+	M.config = config or {}
 
 	vim.api.nvim_create_autocmd("VimLeavePre", {
 		group = vim.api.nvim_create_augroup("FOJ_WS_Cleanup", { clear = true }),

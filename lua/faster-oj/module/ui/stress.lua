@@ -26,7 +26,7 @@ local TC_HEADER = string.format(TC_FORMAT, "TESTS", "STATE", "TIME(T)", "TIME(C)
 
 M.state = {
 	size = 0,
-	results = {},
+	testcases = {},
 	current_idx = 1,
 }
 
@@ -39,8 +39,8 @@ local function log(level, func, msg)
 	end
 end
 
-function M.setup(cfg)
-	M.config = cfg or {}
+function M.setup(config)
+	M.config = config or {}
 	M.current_style = M.config.stress_ui and M.config.stress_ui.default_style or "float"
 	local hls = M.config.highlights or {}
 
@@ -88,13 +88,13 @@ end
 
 ---Refresh detail panels
 local function update_details(index)
-	local r = M.state.results[index]
+	local r = M.state.testcases[index]
 	if not r then
 		return
 	end
 
 	set_buf_content("si", vim.split(r.input or "", "\n"))
-	set_buf_content("eo", vim.split(r.correct and r.correct.output or "", "\n"))
+	set_buf_content("eo", vim.split(r.correct and r.correct.actual or "", "\n"))
 
 	local info_lines = {}
 	if r.correct and r.correct.state and r.correct.state.type ~= "OK" then
@@ -125,7 +125,7 @@ local function update_details(index)
 			})
 		end
 	end
-	set_buf_content("so", vim.split(r.test and r.test.output or "", "\n"), out_hls)
+	set_buf_content("so", vim.split(r.test and r.test.actual or "", "\n"), out_hls)
 end
 
 ---Focus a TC row and refresh the detail panels immediately.
@@ -140,9 +140,9 @@ local function select_row(row)
 end
 
 ---Update TC list and details
-function M.update(size, results)
+function M.update(size, testcases)
 	vim.schedule(function()
-		M.state.size, M.state.results = size, results or {}
+		M.state.size, M.state.testcases = size, testcases or {}
 		if not M.is_open() then
 			return
 		end
@@ -151,7 +151,7 @@ function M.update(size, results)
 		local hls = { { group = "StressUIWinHeader", line = 0, col_start = 0, col_end = -1 } }
 
 		for i = 0, size - 1 do
-			local r = M.state.results[i + 1]
+			local r = M.state.testcases[i + 1]
 			local state_str, time_t, time_c, match_str, hl = "Running", "", "", "", nil
 			if r then
 				time_t = r.test and ((r.test.used_time or 0) .. "MS") or ""
@@ -215,7 +215,7 @@ local function setup_viewer(style)
 	})
 
 	M.bind_keys()
-	M.update(M.state.size, M.state.results)
+	M.update(M.state.size, M.state.testcases)
 	-- M.update renders on the next tick; focus after its buffer rewrite.
 	vim.schedule(function()
 		if ui.get_instance(GROUP, style) ~= inst then
@@ -229,7 +229,7 @@ end
 local function do_toggle_style(old_style, new_style)
 	local saved = {
 		size = M.state.size,
-		results = M.state.results,
+		testcases = M.state.testcases,
 		idx = M.state.current_idx,
 	}
 
@@ -237,7 +237,7 @@ local function do_toggle_style(old_style, new_style)
 	M.current_style = new_style
 	ui.open(GROUP, new_style, get_style_config(), TITLES, WIN_OPTS, function()
 		M.state.size = saved.size
-		M.state.results = saved.results
+		M.state.testcases = saved.testcases
 		M.state.current_idx = math.min(math.max(saved.idx, 1), math.max(saved.size, 1))
 		setup_viewer(new_style)
 	end)
@@ -380,7 +380,7 @@ end
 function M.clear()
 	vim.schedule(function()
 		ui.clear(GROUP)
-		M.state.results, M.state.size = {}, 0
+		M.state.testcases, M.state.size = {}, 0
 	end)
 end
 

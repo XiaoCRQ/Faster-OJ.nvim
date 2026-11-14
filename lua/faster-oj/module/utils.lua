@@ -35,8 +35,8 @@ local function log(level, func, msg)
 	end
 end
 
-function M.setup(cfg)
-	M.config = cfg or {}
+function M.setup(config)
+	M.config = config or {}
 end
 
 ---根据文件扩展名检测语言类型
@@ -57,16 +57,16 @@ function M.get_file_path()
 	return path ~= "" and path or ""
 end
 
----确保目录存在
+---确保文件所在目录存在
 ---@param path string
-function M.ensure_dir(path)
+function M.ensure_parent_dir(path)
 	vim.fn.mkdir(vim.fn.fnamemodify(path, ":h"), "p")
 end
 
 ---获取题目目录路径 (基于指定文件路径，安全于 fast event context)
 ---@param file_path string
 ---@return string
-function M.get_problem_dir_from(file_path)
+function M.get_problem_dir(file_path)
 	if not file_path or file_path == "" then
 		return ""
 	end
@@ -77,14 +77,14 @@ end
 
 ---获取题目目录路径 (从当前缓冲区)
 ---@return string
-function M.get_problem_dir()
-	return M.get_problem_dir_from(M.get_file_path())
+function M.get_current_problem_dir()
+	return M.get_problem_dir(M.get_file_path())
 end
 
 ---获取题目 JSON 路径 (problem.json)
 ---@return string
-function M.get_json_path()
-	local dir = M.get_problem_dir()
+function M.get_problem_json_path()
+	local dir = M.get_current_problem_dir()
 	return dir ~= "" and (dir .. "problem.json") or ""
 end
 
@@ -123,19 +123,12 @@ function M.read_file(path)
 	return content
 end
 
----读取当前缓冲区文件内容
----@return string|nil
-function M.read_file_now()
-	local path = M.get_file_path()
-	return path ~= "" and M.read_file(path) or nil
-end
-
 ---写入文件 (纯内容)
 ---@param path string
 ---@param content string
 ---@return boolean
 function M.write_file(path, content)
-	M.ensure_dir(path)
+	M.ensure_parent_dir(path)
 	local f = io.open(path, "w")
 	if not f then
 		log("ERROR", "write_file", "Failed to open: " .. path)
@@ -175,7 +168,7 @@ function M.write_json(path, data)
 		log("ERROR", "write_json", "Encode error")
 		return false
 	end
-	M.ensure_dir(path)
+	M.ensure_parent_dir(path)
 	local f = io.open(path, "w")
 	if not f then
 		log("ERROR", "write_json", "Failed to open: " .. path)
@@ -186,10 +179,34 @@ function M.write_json(path, data)
 	return true
 end
 
----获取当前题目 JSON 内容
+---读取当前题目的 JSON 内容
 ---@return table|nil
-function M.get_json_file()
-	return M.read_json(M.get_json_path())
+function M.read_problem_json()
+	return M.read_json(M.get_problem_json_path())
+end
+
+---扫描磁盘上的测试用例数量 (最大索引 + 1)
+---@param problem_dir string
+---@return integer
+function M.scan_test_count(problem_dir)
+	local max_index = -1
+	local handle = uv.fs_scandir(problem_dir)
+	if handle then
+		while true do
+			local name = uv.fs_scandir_next(handle)
+			if not name then
+				break
+			end
+			local index = name:match("^(%d+)%.in$") or name:match("^(%d+)%.out$")
+			if index then
+				index = tonumber(index)
+				if index and index > max_index then
+					max_index = index
+				end
+			end
+		end
+	end
+	return max_index + 1
 end
 
 ---获取测试用例数量
@@ -200,42 +217,28 @@ function M.get_test_count(problem_dir)
 	if json and json.testCount then
 		return json.testCount
 	end
-	-- 降级: 扫描 .in 文件数量
-	local count = 0
-	local handle = uv.fs_scandir(problem_dir)
-	if handle then
-		while true do
-			local name, ftype = uv.fs_scandir_next(handle)
-			if not name then
-				break
-			end
-			if ftype == "file" and name:match("%.in$") then
-				count = count + 1
-			end
-		end
-	end
-	return count
+	return M.scan_test_count(problem_dir)
 end
 
 ---读取单个测试用例文件
 ---@param problem_dir string
 ---@param index integer 0-based index
----@return table {input:string, output:string}
+---@return {input:string, expected:string}
 function M.read_test_case(problem_dir, index)
 	local input = M.read_file(problem_dir .. index .. ".in") or ""
-	local output = M.read_file(problem_dir .. index .. ".out") or ""
-	return { input = input, output = output }
+	local expected = M.read_file(problem_dir .. index .. ".out") or ""
+	return { input = input, expected = expected }
 end
 
 ---写入单个测试用例文件
 ---@param problem_dir string
 ---@param index integer 0-based index
 ---@param input string
----@param output string
+---@param expected string
 ---@return boolean
-function M.write_test_case(problem_dir, index, input, output)
+function M.write_test_case(problem_dir, index, input, expected)
 	local ok1 = M.write_file(problem_dir .. index .. ".in", input)
-	local ok2 = M.write_file(problem_dir .. index .. ".out", output)
+	local ok2 = M.write_file(problem_dir .. index .. ".out", expected)
 	return ok1 and ok2
 end
 
@@ -272,23 +275,23 @@ function M.delete_problem_dir(problem_dir)
 	vim.fn.delete(problem_dir, "rf")
 end
 
----删除文件
+---删除单个文件
 ---@param path string
 ---@return boolean
-function M.erase(path)
+function M.delete_file(path)
 	if not path or path == "" then
 		return false
 	end
 	if not M.file_exists(path) then
-		log("INFO", "erase", "File not found, skip: " .. path)
+		log("INFO", "delete_file", "File not found, skip: " .. path)
 		return true
 	end
 	local success, err = uv.fs_unlink(path)
 	if not success then
-		log("ERROR", "erase", "Failed: " .. path .. " - " .. (err or ""))
+		log("ERROR", "delete_file", "Failed: " .. path .. " - " .. (err or ""))
 		return false
 	end
-	log("INFO", "erase", "Deleted: " .. path)
+	log("INFO", "delete_file", "Deleted: " .. path)
 	return true
 end
 

@@ -16,17 +16,17 @@ local function log(level, func, msg)
 	end
 end
 
-local function remove_client(c)
+local function remove_client(client)
 	for i, v in ipairs(clients) do
-		if v == c then
+		if v == client then
 			table.remove(clients, i)
 			return
 		end
 	end
 end
 
-function M.setup(cfg)
-	M.config = cfg or {}
+function M.setup(config)
+	M.config = config or {}
 end
 
 ---@return boolean

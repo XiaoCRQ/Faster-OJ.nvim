@@ -33,8 +33,8 @@ local function log(level, func, msg)
 	end
 end
 
-function M.setup(cfg)
-	M.config = cfg or {}
+function M.setup(config)
+	M.config = config or {}
 	M.current_style = M.config.tc_ui and M.config.tc_ui.default_style or "float"
 	local hls = M.config.highlights or {}
 
@@ -103,7 +103,7 @@ local function update_details(index)
 			})
 		end
 	end
-	set_buf_content("so", vim.split(tc.output or "", "\n"), out_hls)
+	set_buf_content("so", vim.split(tc.actual or "", "\n"), out_hls)
 end
 
 ---Focus a TC row and refresh the detail panels immediately.
